@@ -71,7 +71,7 @@ const BookingManagement = () => {
     const fetchBookings = async () => {
         try {
             const response = await api.get('/bookings/all');
-            setBookings(response.data.bookings || []);
+            setBookings(response.data.bookings || response.data.data || []);
         } catch (error) {
             console.error('Error fetching bookings:', error);
         } finally {

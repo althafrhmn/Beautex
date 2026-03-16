@@ -2,15 +2,18 @@ import supabase from '../config/supabaseClient.js';
 
 export const requireAuth = async (req, res, next) => {
     try {
-        const token = req.headers.authorization?.split(' ')[1];
+        const authHeader = req.headers.authorization;
+        const token = authHeader?.split(' ')[1];
 
         if (!token) {
+            console.warn('[AUTH] No token provided in Authorization header');
             return res.status(401).json({ error: 'No token provided' });
         }
 
         const { data: { user }, error } = await supabase.auth.getUser(token);
 
         if (error || !user) {
+            console.error('[AUTH] Supabase getUser error:', error?.message || 'No user found', 'Token start:', token.substring(0, 15));
             return res.status(401).json({ error: 'Invalid or expired token' });
         }
 

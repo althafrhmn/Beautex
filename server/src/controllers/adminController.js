@@ -1,4 +1,4 @@
-import supabase from '../config/supabaseClient.js';
+import supabase, { supabaseAdmin } from '../config/supabaseClient.js';
 
 // Get comprehensive admin stats - LIVE from database
 export const getAdminStats = async (req, res) => {
@@ -166,24 +166,26 @@ export const getAdminAnalytics = async (req, res) => {
 // Get all customers with their details
 export const getAllCustomers = async (req, res) => {
     try {
-        let { data, error } = await supabase
-            .from('customers')
-            .select('*')
+        // Primary source: profiles table (always up-to-date, role-based)
+        const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, role, created_at')
+            .eq('role', 'customer')
             .order('created_at', { ascending: false });
-        
-        if (error) {
-            // Fallback to profiles table if customers table doesn't exist
-            const { data: pData, error: pError } = await supabase
-                .from('profiles')
-                .select('id, name:full_name, email, phone_number, created_at, address')
-                .eq('role', 'customer')
-                .order('created_at', { ascending: false });
-            
-            if (pError) throw pError;
-            data = pData;
-        }
-        
-        res.status(200).json({ customers: data || [] });
+
+        if (profileError) throw profileError;
+
+        // Normalize to a consistent shape the frontend expects
+        const customers = (profileData || []).map(p => ({
+            id: p.id,
+            name: p.full_name,
+            email: p.email,
+            phone_number: null,   // profiles has no phone column; safe default
+            address: null,
+            created_at: p.created_at,
+        }));
+
+        res.status(200).json({ customers });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -193,21 +195,20 @@ export const getAllCustomers = async (req, res) => {
 export const createCustomer = async (req, res) => {
     const { email, password, fullName, phone, address } = req.body;
     try {
-        // 1. Create user in auth
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // 1. Create user via admin API — bypasses email confirmation & RLS
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
-            options: { 
-                data: { full_name: fullName, role: 'customer' } 
-            }
+            email_confirm: true,
+            user_metadata: { full_name: fullName, role: 'customer' }
         });
         
         if (authError) throw authError;
 
         const userId = authData.user?.id;
         if (userId) {
-            // 2. Insert into customers table (Optional/Resilient)
-            const { error: custErr } = await supabase
+            // 2. Insert into customers table (optional)
+            const { error: custErr } = await supabaseAdmin
                 .from('customers')
                 .upsert({
                     id: userId,
@@ -219,18 +220,16 @@ export const createCustomer = async (req, res) => {
                 });
             
             if (custErr) {
-                console.log('Note: Customers table not found or inaccessible, skipping specific customer record creation. Profile record will still be created.');
+                console.log('Note: customers table not found or inaccessible, skipping.');
             }
 
-            // 3. Upsert to profiles for RBAC
-            const { error: profErr } = await supabase
+            // 3. Upsert to profiles for RBAC — admin client bypasses RLS
+            const { error: profErr } = await supabaseAdmin
                 .from('profiles')
                 .upsert({
                     id: userId,
                     full_name: fullName,
                     email: email,
-                    phone_number: phone,
-                    address: address || '',
                     role: 'customer'
                 });
             
@@ -250,19 +249,17 @@ export const updateCustomer = async (req, res) => {
     const finalName = fullName || name;
 
     try {
-        const { error } = await supabase
-            .from('customers')
-            .update({ 
-                name: finalName, 
-                email: email
-            })
-            .eq('id', id);
-        if (error) throw error;
-
-        // Also update profiles
-        await supabase
+        // Update profiles (source of truth)
+        const { error: profErr } = await supabaseAdmin
             .from('profiles')
             .update({ full_name: finalName })
+            .eq('id', id);
+        if (profErr) throw profErr;
+
+        // Also sync customers table (best-effort)
+        await supabaseAdmin
+            .from('customers')
+            .update({ name: finalName, email })
             .eq('id', id);
 
         res.status(200).json({ message: 'Customer updated successfully' });
@@ -275,17 +272,15 @@ export const updateCustomer = async (req, res) => {
 export const deleteCustomer = async (req, res) => {
     const { id } = req.params;
     try {
-        const { error } = await supabase
-            .from('customers')
-            .delete()
-            .eq('id', id);
-        if (error) throw error;
+        // Delete from customers table (optional, may not exist)
+        await supabaseAdmin.from('customers').delete().eq('id', id);
 
-        // Also delete from profiles
-        await supabase
-            .from('profiles')
-            .delete()
-            .eq('id', id);
+        // Delete profile row
+        await supabaseAdmin.from('profiles').delete().eq('id', id);
+
+        // Hard-delete the auth user — removes them completely
+        const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(id);
+        if (authErr) throw authErr;
 
         res.status(200).json({ message: 'Customer deleted successfully' });
     } catch (error) {
@@ -333,14 +328,13 @@ export const deleteAdmin = async (req, res) => {
     }
 
     try {
-        // Note: Admin deletion only removes their profile/role, 
-        // full auth deletion would require service role which we avoid for safety.
-        const { error } = await supabase
-            .from('profiles')
-            .delete()
-            .eq('id', id);
-        
-        if (error) throw error;
+        // Delete profile row
+        await supabaseAdmin.from('profiles').delete().eq('id', id);
+
+        // Hard-delete the auth user
+        const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(id);
+        if (authErr) throw authErr;
+
         res.status(200).json({ message: 'Administrative access revoked successfully' });
     } catch (error) {
         res.status(400).json({ error: error.message });
@@ -358,27 +352,25 @@ export const createAdminUser = async (req, res) => {
     }
 
     try {
-        // 1. Create user in auth
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // 1. Create user via admin API — bypasses email confirmation & RLS
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
-            options: { 
-                data: { full_name: fullName, role: role } 
-            }
+            email_confirm: true,
+            user_metadata: { full_name: fullName, role: role }
         });
         
         if (authError) throw authError;
 
         const userId = authData.user?.id;
         if (userId) {
-            // 2. Create profile record
-            const { error: profErr } = await supabase
+            // 2. Create profile record — admin client bypasses RLS
+            const { error: profErr } = await supabaseAdmin
                 .from('profiles')
                 .upsert({
                     id: userId,
                     full_name: fullName,
                     email: email,
-                    phone_number: phone || '',
                     role: role
                 });
             

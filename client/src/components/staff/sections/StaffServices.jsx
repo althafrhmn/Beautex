@@ -10,7 +10,7 @@ const StaffServices = () => {
         const fetchServices = async () => {
             try {
                 const res = await api.get('/services');
-                setServices(res.data || []);
+                setServices(res.data?.services || []);
             } catch (err) {
                 console.error('Error fetching services:', err);
             } finally {

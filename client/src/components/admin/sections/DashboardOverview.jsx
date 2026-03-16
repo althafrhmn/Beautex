@@ -68,8 +68,8 @@ const DashboardOverview = () => {
         const fetchStats = async () => {
             try {
                 const response = await api.get('/admin/stats');
-                setStats(response.data.stats);
-                setChartData(response.data.charts);
+                setStats(response.data.stats || {});
+                setChartData(response.data.charts || { revenue: {}, dailyBookings: {}, recentActivities: [] });
             } catch (error) {
                 console.error('Error fetching stats:', error);
             } finally {

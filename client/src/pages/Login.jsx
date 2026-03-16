@@ -50,10 +50,16 @@ const Login = () => {
 
             const { session } = response.data;
 
-            // Get profile for role
+            // Sync session with the Supabase SDK so it can auto-refresh the token
+            await supabase.auth.setSession({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token
+            });
+
+            // Get profile for role (now authenticated)
             const { data: profile } = await supabase
                 .from('profiles')
-                .select('*')
+                .select('role')
                 .eq('id', session.user.id)
                 .maybeSingle();
 

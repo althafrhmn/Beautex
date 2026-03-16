@@ -1,16 +1,19 @@
-import supabase from '../config/supabaseClient.js';
+import supabase, { supabaseAdmin } from '../config/supabaseClient.js';
 
 // Get all staff members with extended details
 export const getAllStaff = async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('profiles')
-            .select('id, full_name, email, phone_number, avatar_url, role, speciality, experience, assigned_shop, created_at')
+            .select('id, full_name, email, role, specialization, phone_number, experience, assigned_shop, avatar_url, working_hours, off_days, created_at')
             .eq('role', 'staff')
             .order('created_at', { ascending: false });
 
         if (error) throw error;
-        res.status(200).json({ staff: data || [] });
+        res.status(200).json({ 
+            staff: data || [],
+            professionals: data || [] // Add fallback for extra robustness
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -21,15 +24,14 @@ export const createStaff = async (req, res) => {
     const { email, password, fullName, phone, speciality, experience, assignedShop, avatarUrl } = req.body;
 
     try {
-        // 1. Create user in Supabase Auth
-        const { data: authData, error: authError } = await supabase.auth.signUp({
+        // 1. Create user via admin API (bypasses email confirmation, no RLS issues)
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
-            options: {
-                data: {
-                    full_name: fullName,
-                    role: 'staff'
-                }
+            email_confirm: true,
+            user_metadata: {
+                full_name: fullName,
+                role: 'staff'
             }
         });
 
@@ -38,19 +40,21 @@ export const createStaff = async (req, res) => {
         const userId = authData.user?.id;
         if (!userId) throw new Error('User creation failed - no ID returned');
 
-        // 2. Upsert profile with staff-specific fields
-        const { error: profileError } = await supabase
+        // 2. Upsert profile using admin client to bypass RLS
+        const { error: profileError } = await supabaseAdmin
             .from('profiles')
             .upsert({
                 id: userId,
                 full_name: fullName,
                 email: email,
-                phone_number: phone,
                 role: 'staff',
-                speciality: speciality || null,
+                phone_number: phone || null,
+                specialization: speciality || null,
                 experience: experience || null,
                 assigned_shop: assignedShop || null,
-                avatar_url: avatarUrl || null
+                avatar_url: avatarUrl || null,
+                working_hours: null,
+                off_days: []
             });
 
         if (profileError) throw profileError;
@@ -68,18 +72,19 @@ export const createStaff = async (req, res) => {
 // Update staff member details (Admin only)
 export const updateStaff = async (req, res) => {
     const { id } = req.params;
-    const { fullName, phone, speciality, experience, assignedShop, avatarUrl } = req.body;
+    const { fullName, phone, speciality, experience, assignedShop, avatarUrl, password } = req.body;
 
     try {
+        // Update profile fields
         const updateData = {};
-        if (fullName !== undefined) updateData.full_name = fullName;
-        if (phone !== undefined) updateData.phone_number = phone;
-        if (speciality !== undefined) updateData.speciality = speciality;
-        if (experience !== undefined) updateData.experience = experience;
+        if (fullName !== undefined)     updateData.full_name = fullName;
+        if (phone !== undefined)        updateData.phone_number = phone;
+        if (speciality !== undefined)   updateData.specialization = speciality;
+        if (experience !== undefined)   updateData.experience = experience;
         if (assignedShop !== undefined) updateData.assigned_shop = assignedShop;
-        if (avatarUrl !== undefined) updateData.avatar_url = avatarUrl;
+        if (avatarUrl !== undefined)    updateData.avatar_url = avatarUrl;
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('profiles')
             .update(updateData)
             .eq('id', id)
@@ -88,6 +93,12 @@ export const updateStaff = async (req, res) => {
             .single();
 
         if (error) throw error;
+
+        // Reset password if provided
+        if (password && password.trim().length >= 6) {
+            const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(id, { password });
+            if (pwError) throw pwError;
+        }
 
         res.status(200).json({ message: 'Staff updated successfully', staff: data });
     } catch (error) {
@@ -100,16 +111,14 @@ export const deleteStaff = async (req, res) => {
     const { id } = req.params;
 
     try {
-        // Soft-delete: change role to 'customer' so they lose staff access
-        const { error } = await supabase
-            .from('profiles')
-            .update({ role: 'customer', speciality: null, experience: null, assigned_shop: null })
-            .eq('id', id)
-            .eq('role', 'staff');
+        // Delete the profile row
+        await supabaseAdmin.from('profiles').delete().eq('id', id);
 
-        if (error) throw error;
+        // Hard-delete the auth user — fully removes them
+        const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(id);
+        if (authErr) throw authErr;
 
-        res.status(200).json({ message: 'Staff member removed successfully' });
+        res.status(200).json({ message: 'Staff member deleted successfully' });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
@@ -120,7 +129,7 @@ export const getStaffProfile = async (req, res) => {
     try {
         const { data, error } = await supabase
             .from('profiles')
-            .select('id, full_name, email, phone_number, avatar_url, speciality, experience, assigned_shop, created_at')
+            .select('id, full_name, email, role, phone_number, specialization, experience, assigned_shop, avatar_url, working_hours, off_days, created_at')
             .eq('id', req.user.id)
             .single();
 
@@ -133,13 +142,14 @@ export const getStaffProfile = async (req, res) => {
 
 // Update staff member's own profile (Staff only)
 export const updateStaffProfile = async (req, res) => {
-    const { fullName, phone, avatarUrl } = req.body;
+    const { fullName, phone, speciality, avatarUrl } = req.body;
 
     try {
         const updateData = {};
-        if (fullName !== undefined) updateData.full_name = fullName;
-        if (phone !== undefined) updateData.phone_number = phone;
-        if (avatarUrl !== undefined) updateData.avatar_url = avatarUrl;
+        if (fullName !== undefined)   updateData.full_name = fullName;
+        if (phone !== undefined)      updateData.phone_number = phone;
+        if (speciality !== undefined) updateData.specialization = speciality;
+        if (avatarUrl !== undefined)  updateData.avatar_url = avatarUrl;
 
         const { data, error } = await supabase
             .from('profiles')

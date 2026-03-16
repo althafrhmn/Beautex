@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import { logout } from '../redux/authSlice';
+import { logout, loginSuccess } from '../redux/authSlice';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
 import { Search, Bell } from 'lucide-react';
@@ -15,8 +15,25 @@ import StaffProfile from '../components/staff/sections/StaffProfile';
 const StaffDashboard = () => {
     const { user, role } = useSelector((state) => state.auth);
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [authReady, setAuthReady] = useState(false);
     const dispatch = useDispatch();
     const navigate = useNavigate();
+
+    // Wait for Supabase to restore the session before firing any API calls
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.access_token) {
+                // Keep Redux/localStorage in sync with the live session
+                localStorage.setItem('token', session.access_token);
+                dispatch(loginSuccess({
+                    user: session.user,
+                    token: session.access_token,
+                    role: role || session.user?.user_metadata?.role || 'staff'
+                }));
+            }
+            setAuthReady(true);
+        });
+    }, []);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -102,7 +119,11 @@ const StaffDashboard = () => {
 
                 <div className="p-10 pb-20">
                     <div className="max-w-[1400px] mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {renderContent()}
+                        {authReady ? renderContent() : (
+                            <div className="flex items-center justify-center py-32">
+                                <div className="w-8 h-8 border-2 border-[#00E6A0] border-t-transparent rounded-full animate-spin" />
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>

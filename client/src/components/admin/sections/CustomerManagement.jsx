@@ -34,7 +34,7 @@ const CustomerManagement = () => {
     const fetchCustomers = async () => {
         try {
             const response = await api.get('/admin/customers');
-            setCustomers(response.data.customers || []);
+            setCustomers(response.data.customers || response.data.data || []);
         } catch (error) {
             console.error('Error fetching customers:', error);
         } finally {

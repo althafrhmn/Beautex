@@ -6,11 +6,40 @@ const api = axios.create({
     headers: { 'Content-Type': 'application/json' },
 });
 
+const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/auth/forgot-password'];
+
 api.interceptors.request.use(async (config) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-        config.headers.Authorization = `Bearer ${session.access_token}`;
+    const isPublicRoute = PUBLIC_ROUTES.some(route => config.url?.includes(route));
+    if (isPublicRoute) return config;
+
+    let token = null;
+
+    try {
+        // getSession() also triggers a token refresh if the current one is expired
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+            token = session.access_token;
+            // Keep localStorage in sync with the (possibly refreshed) token
+            localStorage.setItem('token', token);
+        }
+    } catch (e) {
+        // silently fall through to localStorage
     }
+
+    // Fallback: use the token stored during login
+    if (!token) {
+        const stored = localStorage.getItem('token');
+        if (stored && stored !== 'undefined' && stored !== 'null') {
+            token = stored;
+        }
+    }
+
+    if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+    } else {
+        console.warn(`[AUTH] No valid token found for request to ${config.url}`);
+    }
+
     return config;
 }, (error) => Promise.reject(error));
 

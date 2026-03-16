@@ -150,9 +150,7 @@ export const getAllBookings = async (req, res) => {
             .from('bookings')
             .select(`
                 *,
-                customer:customer_id (full_name, phone_number),
                 salons (name),
-                staff:staff_id (full_name),
                 booking_services (
                     services (name)
                 )
@@ -161,7 +159,30 @@ export const getAllBookings = async (req, res) => {
 
         if (error) throw error;
 
-        res.status(200).json({ bookings: data });
+        // Collect unique customer/staff IDs then fetch their profiles in one go
+        const profileIds = [...new Set([
+            ...data.map(b => b.customer_id).filter(Boolean),
+            ...data.map(b => b.staff_id).filter(Boolean)
+        ])];
+
+        let profileMap = {};
+        if (profileIds.length > 0) {
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, full_name, phone_number')
+                .in('id', profileIds);
+            if (profiles) {
+                profiles.forEach(p => { profileMap[p.id] = p; });
+            }
+        }
+
+        const enriched = data.map(b => ({
+            ...b,
+            customer: profileMap[b.customer_id] || null,
+            staff: profileMap[b.staff_id] ? { full_name: profileMap[b.staff_id].full_name } : null,
+        }));
+
+        res.status(200).json({ bookings: enriched });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -174,7 +195,6 @@ export const getStaffBookings = async (req, res) => {
             .from('bookings')
             .select(`
                 *,
-                customer:customer_id (full_name, phone_number),
                 salons (name),
                 booking_services (
                     services (name)
@@ -185,7 +205,24 @@ export const getStaffBookings = async (req, res) => {
 
         if (error) throw error;
 
-        res.status(200).json({ bookings: data });
+        const customerIds = [...new Set(data.map(b => b.customer_id).filter(Boolean))];
+        let profileMap = {};
+        if (customerIds.length > 0) {
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, full_name, phone_number')
+                .in('id', customerIds);
+            if (profiles) {
+                profiles.forEach(p => { profileMap[p.id] = p; });
+            }
+        }
+
+        const enriched = data.map(b => ({
+            ...b,
+            customer: profileMap[b.customer_id] || null,
+        }));
+
+        res.status(200).json({ bookings: enriched });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

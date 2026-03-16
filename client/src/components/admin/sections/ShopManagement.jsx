@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     Plus, 
     Search, 
@@ -6,28 +6,60 @@ import {
     Trash2, 
     MapPin, 
     Building, 
-    Star, 
     X, 
     Save, 
     Phone, 
-    User, 
     Clock, 
-    Image as ImageIcon 
+    Image as ImageIcon,
+    Globe,
+    User,
+    Scissors,
+    Check,
+    ChevronDown
 } from 'lucide-react';
 import api from '../../../utils/api';
 
+const formatTime = (t) => {
+    if (!t) return '—';
+    const s = t.trim();
+    // Already 12h format (e.g. "09:00 AM")
+    if (/am|pm/i.test(s)) return s;
+    // Convert 24h "HH:MM" → "hh:MM AM/PM"
+    const [h, m] = s.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return s;
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    return `${String(hour).padStart(2, '0')}:${String(m).padStart(2, '0')} ${suffix}`;
+};
+
+// Parse "HH:MM - HH:MM" or "09:00 AM - 08:00 PM" into { open, close }
+const parseHours = (hours) => {
+    if (!hours) return { open: '', close: '' };
+    const parts = hours.split(' - ');
+    if (parts.length < 2) return { open: parts[0]?.trim() || '', close: '' };
+    return { open: parts[0].trim(), close: parts[1].trim() };
+};
+
 const ShopManagement = () => {
     const [shops, setShops] = useState([]);
+    const [allServices, setAllServices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingShop, setEditingShop] = useState(null);
     const [saving, setSaving] = useState(false);
 
+    // Services multi-select state
+    const [selectedServiceIds, setSelectedServiceIds] = useState([]);
+    const [serviceSearch, setServiceSearch] = useState('');
+    const [serviceDropdownOpen, setServiceDropdownOpen] = useState(false);
+    const serviceDropdownRef = useRef(null);
+
     const emptyForm = { 
         name: '', 
-        location: '', 
-        owner_name: '', 
+        location: '',
+        city: '',
+        owner_name: '',
         phone: '', 
         opening_time: '', 
         closing_time: '', 
@@ -37,12 +69,23 @@ const ShopManagement = () => {
 
     useEffect(() => {
         fetchShops();
+        fetchAllServices();
+    }, []);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        const handler = (e) => {
+            if (serviceDropdownRef.current && !serviceDropdownRef.current.contains(e.target))
+                setServiceDropdownOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
     }, []);
 
     const fetchShops = async () => {
         try {
             const response = await api.get('/shops');
-            setShops(response.data.shops || []);
+            setShops(response.data.salons || response.data.shops || []);
         } catch (error) {
             console.error('Error fetching shops:', error);
         } finally {
@@ -50,33 +93,69 @@ const ShopManagement = () => {
         }
     };
 
-    const handleOpenForm = (shop = null) => {
+    const fetchAllServices = async () => {
+        try {
+            const res = await api.get('/services');
+            setAllServices(res.data.services || []);
+        } catch (err) {
+            console.error('Error fetching services:', err);
+        }
+    };
+
+    const fetchShopServices = async (shopId) => {
+        try {
+            const res = await api.get(`/shops/${shopId}/services`);
+            return (res.data.services || []).map(s => s.id);
+        } catch {
+            return [];
+        }
+    };
+
+    const handleOpenForm = async (shop = null) => {
+        setServiceSearch('');
         if (shop) {
+            const { open, close } = parseHours(shop.hours);
             setEditingShop(shop);
             setFormData({
                 name: shop.name || '',
-                location: shop.location || '',
+                location: shop.address || shop.location || '',
+                city: shop.city || '',
                 owner_name: shop.owner_name || '',
                 phone: shop.phone || '',
-                opening_time: shop.opening_time || '',
-                closing_time: shop.closing_time || '',
+                opening_time: open,
+                closing_time: close,
                 image_url: shop.image_url || ''
             });
+            const ids = await fetchShopServices(shop.id);
+            setSelectedServiceIds(ids);
         } else {
             setEditingShop(null);
             setFormData(emptyForm);
+            setSelectedServiceIds([]);
         }
         setIsFormOpen(true);
+    };
+
+    const toggleService = (id) => {
+        setSelectedServiceIds(prev =>
+            prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+        );
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSaving(true);
         try {
+            let shopId = editingShop?.id;
             if (editingShop) {
-                await api.put(`/shops/${editingShop.id}`, formData);
+                await api.put(`/shops/${shopId}`, formData);
             } else {
-                await api.post('/shops', formData);
+                const res = await api.post('/shops', formData);
+                shopId = res.data.salon?.id;
+            }
+            // Save service assignments
+            if (shopId) {
+                await api.put(`/shops/${shopId}/services`, { serviceIds: selectedServiceIds });
             }
             fetchShops();
             setIsFormOpen(false);
@@ -100,8 +179,9 @@ const ShopManagement = () => {
 
     const filteredShops = shops.filter(shop =>
         shop.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        shop.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        shop.owner_name?.toLowerCase().includes(searchQuery.toLowerCase())
+        (shop.address || shop.location)?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        shop.phone?.includes(searchQuery) ||
+        shop.city?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -141,26 +221,39 @@ const ShopManagement = () => {
                                 <th className="px-6 py-4 font-semibold rounded-tl-lg">Shop Name</th>
                                 <th className="px-6 py-4 font-semibold">Location</th>
                                 <th className="px-6 py-4 font-semibold">Owner</th>
+                                <th className="px-6 py-4 font-semibold">Phone</th>
                                 <th className="px-6 py-4 font-semibold">Timings</th>
                                 <th className="px-6 py-4 font-semibold text-right rounded-tr-lg">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#2A2A2A]">
                             {loading ? (
-                                <tr><td colSpan="5" className="text-center py-8 text-gray-500">Loading shops...</td></tr>
+                                <tr><td colSpan="6" className="text-center py-8 text-gray-500">Loading shops...</td></tr>
                             ) : filteredShops.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500 font-medium">
+                                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500 font-medium">
                                         No shops found.
                                     </td>
                                 </tr>
                             ) : (
                                 filteredShops.map((shop) => (
                                     <tr key={shop.id} className="hover:bg-[#1A1A1A]/50 transition-colors">
-                                        <td className="px-6 py-4 font-medium text-white">{shop.name}</td>
-                                        <td className="px-6 py-4 text-gray-400">{shop.location}</td>
-                                        <td className="px-6 py-4 text-gray-400">{shop.owner_name}</td>
-                                        <td className="px-6 py-4 text-gray-400">{shop.opening_time} - {shop.closing_time}</td>
+                                        <td className="px-6 py-4 font-medium text-white">
+                                            <div>{shop.name}</div>
+                                            {shop.city && <div className="text-xs text-gray-500 mt-0.5">{shop.city}</div>}
+                                        </td>
+                                        <td className="px-6 py-4 text-gray-400">{shop.address || shop.location || '—'}</td>
+                                        <td className="px-6 py-4 text-gray-400">{shop.owner_name || '—'}</td>
+                                        <td className="px-6 py-4 text-gray-400">
+                                            {shop.phone
+                                                ? <span className="flex items-center gap-1.5"><Phone size={13} className="text-gray-500" />{shop.phone}</span>
+                                                : '—'}
+                                        </td>
+                                        <td className="px-6 py-4 text-gray-400">
+                                            {shop.hours
+                                                ? (() => { const { open, close } = parseHours(shop.hours); return `${formatTime(open)} – ${formatTime(close)}`; })()
+                                                : '—'}
+                                        </td>
                                         <td className="px-6 py-4 text-right space-x-3">
                                             <button 
                                                 onClick={() => handleOpenForm(shop)}
@@ -243,17 +336,40 @@ const ShopManagement = () => {
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-300 mb-1.5 font-sans">Phone Number</label>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1.5 font-sans">City</label>
                                     <div className="relative">
-                                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                        <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                                         <input
                                             type="text"
                                             className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-colors font-sans"
-                                            value={formData.phone}
-                                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                            placeholder="Phone number"
+                                            value={formData.city}
+                                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                                            placeholder="City"
                                         />
                                     </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-1.5 font-sans">Phone Number</label>
+                                <div className="relative">
+                                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                    <input
+                                        type="tel"
+                                        maxLength={10}
+                                        className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg pl-10 pr-16 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-colors font-sans"
+                                        value={formData.phone}
+                                        onChange={(e) => {
+                                            const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                            setFormData({ ...formData, phone: digits });
+                                        }}
+                                        placeholder="10-digit number"
+                                    />
+                                    {formData.phone.length > 0 && (
+                                        <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs font-mono ${formData.phone.length === 10 ? 'text-[#00E6A0]' : 'text-gray-500'}`}>
+                                            {formData.phone.length}/10
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -261,26 +377,24 @@ const ShopManagement = () => {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-300 mb-1.5 font-sans">Opening Time</label>
                                     <div className="relative">
-                                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={16} />
                                         <input
-                                            type="text"
-                                            className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-colors font-sans"
+                                            type="time"
+                                            className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-colors font-sans appearance-none [color-scheme:dark]"
                                             value={formData.opening_time}
                                             onChange={(e) => setFormData({ ...formData, opening_time: e.target.value })}
-                                            placeholder="09:00 AM"
                                         />
                                     </div>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-300 mb-1.5 font-sans">Closing Time</label>
                                     <div className="relative">
-                                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none z-10" size={16} />
                                         <input
-                                            type="text"
-                                            className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-colors font-sans"
+                                            type="time"
+                                            className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg pl-10 pr-3 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-colors font-sans appearance-none [color-scheme:dark]"
                                             value={formData.closing_time}
                                             onChange={(e) => setFormData({ ...formData, closing_time: e.target.value })}
-                                            placeholder="08:00 PM"
                                         />
                                     </div>
                                 </div>
@@ -298,6 +412,88 @@ const ShopManagement = () => {
                                         placeholder="https://..."
                                     />
                                 </div>
+                            </div>
+
+                            {/* Services Multi-Select */}
+                            <div ref={serviceDropdownRef}>
+                                <label className="block text-sm font-medium text-gray-300 mb-1.5 font-sans flex items-center gap-1.5">
+                                    <Scissors size={14} className="text-[#00E6A0]" /> Services Offered
+                                    {selectedServiceIds.length > 0 && (
+                                        <span className="ml-auto bg-[#00E6A0]/20 text-[#00E6A0] text-xs font-bold px-2 py-0.5 rounded-full">
+                                            {selectedServiceIds.length} selected
+                                        </span>
+                                    )}
+                                </label>
+
+                                {/* Search trigger */}
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" size={14} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search services to add..."
+                                        value={serviceSearch}
+                                        onChange={(e) => { setServiceSearch(e.target.value); setServiceDropdownOpen(true); }}
+                                        onFocus={() => setServiceDropdownOpen(true)}
+                                        className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg pl-9 pr-9 py-2.5 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-colors font-sans"
+                                    />
+                                    <ChevronDown
+                                        size={14}
+                                        onClick={() => setServiceDropdownOpen(o => !o)}
+                                        className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 cursor-pointer transition-transform ${serviceDropdownOpen ? 'rotate-180' : ''}`}
+                                    />
+
+                                    {serviceDropdownOpen && (
+                                        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl shadow-2xl overflow-hidden max-h-52 overflow-y-auto">
+                                            {allServices.length === 0 ? (
+                                                <p className="px-4 py-3 text-sm text-gray-500 text-center">No services found. Add services first.</p>
+                                            ) : (
+                                                (() => {
+                                                    const filtered = allServices.filter(s =>
+                                                        s.name?.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+                                                        s.category?.toLowerCase().includes(serviceSearch.toLowerCase())
+                                                    );
+                                                    return filtered.length === 0
+                                                        ? <p className="px-4 py-3 text-sm text-gray-500 text-center">No match for "{serviceSearch}"</p>
+                                                        : filtered.map(svc => {
+                                                            const selected = selectedServiceIds.includes(svc.id);
+                                                            return (
+                                                                <button
+                                                                    key={svc.id}
+                                                                    type="button"
+                                                                    onClick={() => toggleService(svc.id)}
+                                                                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors text-left ${selected ? 'bg-[#00E6A0]/10' : 'hover:bg-[#2A2A2A]'}`}
+                                                                >
+                                                                    <div>
+                                                                        <span className={`font-medium ${selected ? 'text-[#00E6A0]' : 'text-white'}`}>{svc.name}</span>
+                                                                        <span className="text-gray-500 text-xs ml-2">{svc.category} · {svc.duration_minutes}min · ₹{svc.price}</span>
+                                                                    </div>
+                                                                    {selected && <Check size={14} className="text-[#00E6A0] flex-none" />}
+                                                                </button>
+                                                            );
+                                                        });
+                                                })()
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Selected service chips */}
+                                {selectedServiceIds.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-2">
+                                        {selectedServiceIds.map(id => {
+                                            const svc = allServices.find(s => s.id === id);
+                                            if (!svc) return null;
+                                            return (
+                                                <span key={id} className="flex items-center gap-1.5 bg-[#00E6A0]/15 border border-[#00E6A0]/30 text-[#00E6A0] text-xs font-medium px-2.5 py-1 rounded-full">
+                                                    {svc.name}
+                                                    <button type="button" onClick={() => toggleService(id)} className="hover:text-white transition-colors">
+                                                        <X size={11} />
+                                                    </button>
+                                                </span>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
 
                             <button

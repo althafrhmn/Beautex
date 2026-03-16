@@ -56,6 +56,13 @@ const AdminLogin = () => {
 
             const { session } = response.data;
 
+            // CRITICAL: Sync the session with the client-side Supabase SDK
+            // This ensures subsequent calls via the api utility have the correct Authorization header
+            await supabase.auth.setSession({
+                access_token: session.access_token,
+                refresh_token: session.refresh_token
+            });
+
             // Get profile for role
             const { data: profile } = await supabase
                 .from('profiles')
