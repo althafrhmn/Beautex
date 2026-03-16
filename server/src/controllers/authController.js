@@ -18,33 +18,13 @@ export const register = async (req, res) => {
 
         if (error) throw error;
 
-        // 2. Insert into customers table for Admin Dashboard visibility (Resilient)
-        if (data.user) {
-            const { error: custErr } = await supabase
-                .from('customers')
-                .upsert({
-                    id: data.user.id,
-                    name: fullName,
-                    email: email,
-                    created_at: new Date().toISOString()
-                });
-            
-            if (custErr) {
-                console.log('Note: Customers table not found, profile only created.');
-            }
-            
-            // Also ensure profile exists for RBAC
-            await supabase
-                .from('profiles')
-                .upsert({
-                    id: data.user.id,
-                    full_name: fullName,
-                    email: email,
-                    role: role || 'customer'
-                });
-        }
-
-        res.status(201).json({ message: 'User registered successfully', user: data.user });
+        // 2. Profile and Customer records are now handled by the PostgreSQL trigger 'on_auth_user_created'
+        // This ensures data consistency and reduces backend complexity.
+        
+        res.status(201).json({ 
+            message: 'Ritual account created successfully. Welcome to the sanctuary.', 
+            user: data.user 
+        });
     } catch (error) {
         console.error('Registration Error:', error);
         res.status(400).json({ error: error.message });

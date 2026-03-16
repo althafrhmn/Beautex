@@ -3,34 +3,24 @@ import { supabase } from './supabaseClient';
 
 const api = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api',
-    headers: {
-        'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor to add Token from LocalStorage
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+api.interceptors.request.use(async (config) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+        config.headers.Authorization = `Bearer ${session.access_token}`;
     }
-
     return config;
-}, (error) => {
-    return Promise.reject(error);
-});
+}, (error) => Promise.reject(error));
 
-// Response interceptor for error handling
-api.interceptors.response.use((response) => {
-    return response;
-}, (error) => {
-    if (error.response && error.response.status === 401) {
-        // Handle unauthorized access (optional: redirect to login)
-        console.error('Unauthorized access');
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) console.error('Unauthorized');
+        console.error('API ERROR:', error.response?.data || error.message);
+        return Promise.reject(error);
     }
-    console.error('API ERROR Details:', error.response?.data || error.message);
-    return Promise.reject(error);
-});
+);
 
 export default api;

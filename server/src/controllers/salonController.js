@@ -37,18 +37,17 @@ export const getSalonById = async (req, res) => {
 // Create a salon (Admin)
 export const createSalon = async (req, res) => {
     try {
-        const { name, location, owner_name, phone, opening_time, closing_time, image_url } = req.body;
+        const { name, location, phone, hours, image_url, tags } = req.body;
         const { data, error } = await supabase
             .from('salons')
             .insert([{ 
                 name, 
-                address: location, // Location field maps to address
-                city: 'Global', // Default city
-                owner_name, 
+                address: location,
+                city: 'Global',
                 phone, 
-                opening_time, 
-                closing_time, 
-                image_url 
+                hours: hours || '10:00 AM - 08:00 PM',
+                image_url,
+                tags: tags || []
             }])
             .select()
             .single();
