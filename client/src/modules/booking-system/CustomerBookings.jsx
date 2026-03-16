@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { useSelector } from 'react-redux';
 import api from '../../utils/api';
-import { motion, AnimatePresence } from 'framer-motion';
 
 const CustomerBookings = () => {
     const [bookings, setBookings] = useState([]);
@@ -140,11 +139,9 @@ const CustomerBookings = () => {
                 {/* Booking List */}
                 <div className="space-y-6">
                     {displayedBookings.length > 0 ? displayedBookings.map((b) => (
-                        <motion.div
+                        <div
                             key={b.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="bg-[#0A0A0A] rounded-[2.5rem] p-6 border border-white/5 shadow-sm group hover:border-[#00E6A0]/20 transition-all"
+                            className="bg-[#0A0A0A] rounded-[2.5rem] p-6 border border-white/5 shadow-sm group hover:border-[#00E6A0]/20 transition-all animate-in fade-in slide-in-from-bottom-2 duration-300"
                         >
                             <div className="flex gap-6 mb-6">
                                 <div className="w-24 h-24 rounded-3xl overflow-hidden flex-none">
@@ -211,7 +208,7 @@ const CustomerBookings = () => {
                                     </button>
                                 </div>
                             )}
-                        </motion.div>
+                        </div>
                     )) : (
                         <div className="py-24 text-center">
                             <div className="w-20 h-20 bg-[#0A0A0A] rounded-[2rem] flex items-center justify-center mx-auto mb-6 shadow-sm">
@@ -224,20 +221,10 @@ const CustomerBookings = () => {
             </div>
 
             {/* Reschedule Modal */}
-            <AnimatePresence>
-                {reschedulingBooking && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md"
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, y: 20 }}
-                            animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.9, y: 20 }}
-                            className="bg-[#0A0A0A] rounded-[3rem] p-10 max-w-sm w-full shadow-2xl relative border border-white/5"
-                        >
+            {reschedulingBooking && (
+                    <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+                        <div className="bg-[#0A0A0A] rounded-[3rem] p-10 max-w-sm w-full shadow-2xl relative border border-white/5 animate-in zoom-in-95 duration-200">
+                        
                             <h3 className="text-2xl font-black text-white text-center mb-8">Adjust Time</h3>
                             <div className="space-y-8">
                                 <div>
@@ -272,10 +259,9 @@ const CustomerBookings = () => {
                                     <button onClick={submitReschedule} className="flex-1 py-4 bg-[#00E6A0] text-[#050505] rounded-2xl font-bold text-xs shadow-lg shadow-[#00E6A0]/20 hover:bg-white transition-colors">Reschedule</button>
                                 </div>
                             </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                        </div>
+                    </div>
+            )}
         </div>
     );
 };

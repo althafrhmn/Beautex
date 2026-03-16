@@ -71,14 +71,15 @@ export const getAvailableSlots = async (req, res) => {
         const effectiveStartTime = staffHours ? parseTime(staffHours.start) : startTime;
         const effectiveEndTime = staffHours ? parseTime(staffHours.end) : endTime;
 
-        // 2. Fetch existing bookings
+        // 2. Fetch existing bookings — always scoped to the salon so slots are accurate
         let query = supabase
             .from('bookings')
             .select('start_time, end_time')
+            .eq('salon_id', salon_id)
             .eq('booking_date', date)
             .neq('status', 'cancelled');
 
-        if (staff_id && staff_id !== 'auto') {
+        if (staff_id && staff_id !== 'auto' && staff_id !== 'any') {
             query = query.eq('staff_id', staff_id);
         }
 

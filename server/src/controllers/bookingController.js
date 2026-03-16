@@ -38,20 +38,38 @@ export const createBooking = async (req, res) => {
         const endDate = new Date(startDate.getTime() + total_duration * 60000);
         const end_time = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
 
-        // 2. Double booking prevention / Availability Check
-        // Simple check: see if staff has any booking overlapping this time
+        // 2. Double-booking prevention
+        const overlapFilter = `start_time.lt.${end_time},end_time.gt.${start_time}`;
+
+        // Always check salon-level conflicts (catches all bookings regardless of staff)
+        const { data: salonOverlap, error: salonOverlapError } = await supabase
+            .from('bookings')
+            .select('id')
+            .eq('salon_id', salon_id)
+            .eq('booking_date', booking_date)
+            .neq('status', 'cancelled')
+            .lt('start_time', end_time)
+            .gt('end_time', start_time);
+
+        if (salonOverlapError) throw salonOverlapError;
+        if (salonOverlap && salonOverlap.length > 0) {
+            return res.status(400).json({ error: 'This time slot is already booked. Please choose a different time.' });
+        }
+
+        // Also check staff-level conflicts if a specific staff is assigned
         if (staff_id) {
-            const { data: overlapping, error: overlapError } = await supabase
+            const { data: staffOverlap, error: staffOverlapError } = await supabase
                 .from('bookings')
-                .select('*')
+                .select('id')
                 .eq('staff_id', staff_id)
                 .eq('booking_date', booking_date)
                 .neq('status', 'cancelled')
-                .or(`and(start_time.lte.${start_time},end_time.gt.${start_time}),and(start_time.lt.${end_time},end_time.gte.${end_time})`);
+                .lt('start_time', end_time)
+                .gt('end_time', start_time);
 
-            if (overlapError) throw overlapError;
-            if (overlapping && overlapping.length > 0) {
-                return res.status(400).json({ error: 'Selected staff is not available at this time' });
+            if (staffOverlapError) throw staffOverlapError;
+            if (staffOverlap && staffOverlap.length > 0) {
+                return res.status(400).json({ error: 'Selected staff is not available at this time.' });
             }
         }
 
@@ -125,8 +143,7 @@ export const getUserBookings = async (req, res) => {
             .from('bookings')
             .select(`
                 *,
-                salons (name, address, city),
-                profiles:staff_id (full_name),
+                salons (name, address, city, image_url),
                 booking_services (
                     service_id,
                     services (name, price)
@@ -137,7 +154,25 @@ export const getUserBookings = async (req, res) => {
 
         if (error) throw error;
 
-        res.status(200).json({ bookings: data });
+        // Fetch staff names separately to avoid double-join schema cache issues
+        const staffIds = [...new Set(data.map(b => b.staff_id).filter(Boolean))];
+        let staffMap = {};
+        if (staffIds.length > 0) {
+            const { data: staffProfiles } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', staffIds);
+            if (staffProfiles) {
+                staffProfiles.forEach(p => { staffMap[p.id] = p.full_name; });
+            }
+        }
+
+        const enriched = data.map(b => ({
+            ...b,
+            staff_name: b.staff_id ? staffMap[b.staff_id] || null : null
+        }));
+
+        res.status(200).json({ bookings: enriched });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
