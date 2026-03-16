@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --primary: #00E6A0;
+    --primary-hover: #00C88B;
+    --primary-light: rgba(0, 230, 160, 0.1);
+    --primary-glow: rgba(0, 230, 160, 0.2);
+}
+
+@layer base {
+
+    html,
+    body {
+        @apply antialiased;
+        /* Prevent caret (text cursor) from appearing on non-editable elements */
+        caret-color: transparent;
+        /* Prevent accidental UI highlighting */
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Re-enable caret and selection for input/editable fields */
+    input,
+    textarea,
+    [contenteditable="true"] {
+        caret-color: auto;
+        user-select: text;
+    }
+
+    /* Allow logical text selection for content */
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    p,
+    span,
+    li,
+    a {
+        user-select: text;
+    }
+
+    /* Explicitly keep buttons clean */
+    button {
+        user-select: none;
+    }
+}
+
+@layer utilities {
+    .animate-infinite-scroll {
+        animation: infinite-scroll 40s linear infinite;
+    }
+
+    .animate-gradient-x {
+        background-size: 200% 200%;
+        animation: gradient-x 15s ease infinite;
+    }
+}
+
+@keyframes infinite-scroll {
+    from {
+        transform: translateX(0);
+    }
+
+    to {
+        transform: translateX(-50%);
+    }
+}
+
+@keyframes gradient-x {
+    0% {
+        background-position: 0% 50%;
+    }
+
+    50% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: 0% 50%;
+    }
+}
