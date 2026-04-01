@@ -4,7 +4,8 @@ import {
     MapPin, Star, Calendar, Clock,
     ArrowLeft, ArrowRight, CheckCircle,
     Scissors, Info, ShieldCheck,
-    Check, Plus, Phone, CreditCard, Lock, RefreshCw
+    Check, Plus, Phone, CreditCard, Lock, RefreshCw,
+    ChevronRight, User
 } from 'lucide-react';
 import api from '../../utils/api';
 // eslint-disable-next-line no-unused-vars
@@ -18,11 +19,13 @@ const BookingFlow = () => {
     const [salons, setSalons] = useState([]);
     const [services, setServices] = useState([]);
     const [shopServices, setShopServices] = useState([]);
+    const [staffList, setStaffList] = useState([]);
 
     const [slots, setSlots] = useState([]);
 
     const [selectedSalon, setSelectedSalon] = useState(null);
     const [selectedServices, setSelectedServices] = useState([]);
+    const [selectedStaff, setSelectedStaff] = useState(null);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedSlot, setSelectedSlot] = useState(null);
 
@@ -127,7 +130,7 @@ const BookingFlow = () => {
             const { data } = await api.get('/availability/slots', {
                 params: {
                     salon_id: selectedSalon.id,
-                    staff_id: null,
+                    staff_id: selectedStaff?.id || null,
                     date,
                     duration_minutes: duration || 30
                 }
@@ -159,24 +162,24 @@ const BookingFlow = () => {
         const salonId = salon.id;
         const idNum = typeof salonId === 'string' ? salonId.charCodeAt(0) + (parseInt(salonId) || 0) : salonId;
         
-        const isGrooming = /grooming/i.test(salon.name);
-        const isBridalShop = /bridal|wedding|ladies|boutique|makeover|essensuals|ziana/i.test(salon.name);
+        const tags = salon.tags || [];
+        const isAllSalon = tags.includes('All Related Salon') || tags.length === 0;
+        const hasHair = tags.includes('Hair Cutting Styles') || isAllSalon;
+        const hasBeautician = tags.includes('Beautician Styles') || tags.includes('Bridal & Makeup') || isAllSalon;
+        const hasBridal = tags.includes('Bridal & Makeup') || isAllSalon;
 
         const filtered = allServices.filter((s, i) => {
-            // Give men's grooming shops only men's / general haircuts
-            if (isGrooming && (s.category === 'Bridal' || s.category === 'Wellness' || s.name.toLowerCase().includes('facial'))) return false;
-            // Limit Bridals to bridal shops
-            if (s.category === 'Bridal' && !isBridalShop) return false;
+            const cat = (s.category || '').toLowerCase();
+            // Category-based filtering from tags
+            if (cat === 'hair' && !hasHair) return false;
+            if (cat === 'bridal' && !hasBridal) return false;
+            if ((cat === 'skin' || cat === 'nails' || cat === 'massage') && !hasBeautician) return false;
             
-            // Randomly drop some services so no shop has everything
-            if ((i + idNum) % 4 === 0 && s.category !== 'Hair') return false; 
-            
+            // For other shops/tags, don't drop everything
             return true;
         });
 
-        const finalServices = filtered.length > 0 ? filtered : allServices;
-
-        return finalServices.map((s, i) => {
+        return filtered.map((s, i) => {
             const factor = 1 + ((idNum + i) % 4) * 0.15;
             const newPrice = Math.round(parseFloat(s.price) * factor / 50) * 50;
             
@@ -194,9 +197,36 @@ const BookingFlow = () => {
         });
     };
 
-    const handleSalonSelect = (salon, targetStep = 2) => {
+    const fetchStaff = async (salonId, serviceId = null) => {
+        try {
+            const res = await api.get(`/availability/staff/${salonId}`, {
+                params: { service_id: serviceId }
+            });
+            setStaffList(res.data?.staff || []);
+        } catch (err) {
+            console.error('Fetch staff error:', err);
+            setStaffList([]);
+        }
+    };
+
+    const handleSalonSelect = async (salon, targetStep = 2) => {
+        setLoading(true);
         setSelectedSalon(salon);
-        setShopServices(getShopServices(salon, services));
+        try {
+            const res = await api.get(`/shops/${salon.id}/services`);
+            if (res.data.services && res.data.services.length > 0) {
+                setShopServices(res.data.services);
+            } else {
+                setShopServices(getShopServices(salon, services));
+            }
+        } catch (err) {
+            console.error('Error fetching shop services:', err);
+            setShopServices(getShopServices(salon, services));
+        } finally {
+            setLoading(false);
+        }
+        
+        fetchStaff(salon.id);
         fetchSlots(selectedDate);
         setStep(targetStep);
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -237,7 +267,7 @@ const BookingFlow = () => {
             const res = await api.post('/bookings', {
                 salon_id: selectedSalon.id,
                 service_ids: selectedServices.map(s => s.original_id || s.id),
-                staff_id: null,
+                staff_id: selectedStaff?.id || null,
                 booking_date: selectedDate,
                 start_time: selectedSlot,
                 notes: bookingNote,
@@ -358,7 +388,7 @@ const BookingFlow = () => {
                             <Calendar size={20} className="text-[#00E6A0]" />
                             <div>
                                 <p className="font-bold text-white">{new Date(selectedDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-                                <p className="text-sm text-gray-500">Reach Shop By: {selectedSlot}</p>
+                                <p className="text-sm text-gray-500">Reach Shop By: {selectedSlot} • {selectedStaff ? `Expert: ${selectedStaff.full_name}` : 'Any Expert'}</p>
                             </div>
                         </div>
                         
@@ -396,8 +426,9 @@ const BookingFlow = () => {
                     <h1 className="text-xl font-black tracking-tight">
                         {step === 1 ? 'Explore Shops' :
                          step === 2 ? 'Select Services' :
-                         step === 3 ? 'Select Date & Time' :
-                         step === 4 ? 'Your Details' : 'Payment Details'}
+                         step === 3 ? 'Select Expert' :
+                         step === 4 ? 'Select Date & Time' :
+                         step === 5 ? 'Your Details' : 'Payment Details'}
                     </h1>
                     <div className="w-10" />
                 </div>
@@ -445,7 +476,7 @@ const BookingFlow = () => {
                         </motion.div>
                     )}
 
-                    {step >= 2 && step <= 3 && (
+                    {step >= 2 && step <= 4 && (
                         <motion.div
                             key={`step${step}`}
                             {...{initial: { opacity: 0, x: 20 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, x: -20 }}}
@@ -504,8 +535,58 @@ const BookingFlow = () => {
                             </section>
                             )}
 
-                            {/* Date & Time Section */}
+                            {/* Staff Selection Step */}
                             {step === 3 && (
+                                <section>
+                                    <h4 className="text-lg font-black mb-6">Select Expert</h4>
+                                    <div className="grid gap-4">
+                                        {/* Any Available Option */}
+                                        <div
+                                            onClick={() => { setSelectedStaff(null); setStep(4); fetchSlots(selectedDate); }}
+                                            className={`p-6 rounded-[2rem] border transition-all cursor-pointer flex items-center justify-between ${selectedStaff === null ? 'bg-[#00E6A0]/10 border-[#00E6A0]' : 'bg-[#0A0A0A] border-white/5 hover:border-white/10'}`}
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-gray-500">
+                                                    <Plus size={24} />
+                                                </div>
+                                                <div>
+                                                    <h5 className="font-bold text-white">Any Available Expert</h5>
+                                                    <p className="text-xs text-gray-500 italic">Fastest booking experience</p>
+                                                </div>
+                                            </div>
+                                            {selectedStaff === null && <CheckCircle size={20} className="text-[#00E6A0]" />}
+                                        </div>
+
+                                        {staffList.map(staff => (
+                                            <div
+                                                key={staff.id}
+                                                onClick={() => { setSelectedStaff(staff); setStep(4); fetchSlots(selectedDate); }}
+                                                className={`p-6 rounded-[2rem] border transition-all cursor-pointer flex items-center justify-between ${selectedStaff?.id === staff.id ? 'bg-[#00E6A0]/10 border-[#00E6A0]' : 'bg-[#0A0A0A] border-white/5 hover:border-white/10'}`}
+                                            >
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-14 h-14 rounded-2xl overflow-hidden bg-white/5">
+                                                        {staff.avatar_url ? (
+                                                            <img src={staff.avatar_url} alt="" className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-gray-500">
+                                                                <User size={24} />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <h5 className="font-bold text-white">{staff.full_name}</h5>
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#00E6A0]">{staff.specialization || 'Professional Artist'}</p>
+                                                    </div>
+                                                </div>
+                                                {selectedStaff?.id === staff.id && <CheckCircle size={20} className="text-[#00E6A0]" />}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
+
+                            {/* Date & Time Section */}
+                            {step === 4 && (
                             <>
                                 <section>
                                     <div className="flex items-center justify-between mb-6 mt-4">
@@ -576,7 +657,7 @@ const BookingFlow = () => {
                         </motion.div>
                     )}
 
-                    {step === 4 && (
+                    {step === 5 && (
                         <motion.div
                             key="step5"
                             initial={{ opacity: 0, x: 20 }}
@@ -707,7 +788,7 @@ const BookingFlow = () => {
                         </motion.div>
                     )}
 
-                    {step === 5 && (
+                    {step === 6 && (
                         <motion.div
                             key="step6"
                             initial={{ opacity: 0, x: 20 }}
@@ -789,13 +870,28 @@ const BookingFlow = () => {
                         {step === 2 && (
                             <button
                                 disabled={selectedServices.length === 0}
-                                onClick={() => { fetchSlots(selectedDate); setStep(3); }}
+                                onClick={() => { 
+                                    setStep(3); 
+                                    if (selectedSalon) {
+                                        // Filter experts by the first selected service ritual
+                                        const serviceId = selectedServices[0]?.original_id || selectedServices[0]?.id;
+                                        fetchStaff(selectedSalon.id, serviceId);
+                                    }
+                                }}
                                 className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${selectedServices.length > 0 ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
                             >
-                                Select Date & Time <ArrowRight size={18} />
+                                Select Expert <ArrowRight size={18} />
                             </button>
                         )}
                         {step === 3 && (
+                            <button
+                                onClick={() => { setSelectedStaff(null); setStep(4); fetchSlots(selectedDate); }}
+                                className="w-full py-5 rounded-[1.5rem] text-lg font-black text-white bg-white/5 border border-white/5 hover:bg-white/10 transition-all"
+                            >
+                                Skip to Date & Time
+                            </button>
+                        )}
+                        {step === 4 && (
                             <div className="flex flex-col gap-4">
                                 <div className="flex items-center justify-between px-2">
                                     <div className="text-xs font-bold text-gray-500">
@@ -806,33 +902,30 @@ const BookingFlow = () => {
                                     </div>
                                 </div>
                                 <button
-                                    disabled={!selectedSlot || loading}
-                                    onClick={() => setStep(4)}
-                                    className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${selectedSlot ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
+                                    disabled={!selectedSlot}
+                                    onClick={() => setStep(5)}
+                                    className={`flex-1 py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${selectedSlot ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
                                 >
                                     Your Details <ArrowRight size={18} />
                                 </button>
                             </div>
                         )}
-                        {step === 4 && (() => {
-                            const isValid = fullName.trim() && otpVerified && dob && address.trim() && captchaInput === captchaCode;
-                            return (
-                                <button
-                                    disabled={!isValid}
-                                    onClick={() => { if (isValid) { setError(null); setStep(5); } else { setError('Please complete all required fields and verify your phone number & captcha.'); } }}
-                                    className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${isValid ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
-                                >
-                                    Proceed to Payment <ArrowRight size={18} />
-                                </button>
-                            );
-                        })()}
                         {step === 5 && (
+                            <button
+                                disabled={!fullName || !phone || !otpVerified || (captchaInput !== captchaCode)}
+                                onClick={() => setStep(6)}
+                                className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${fullName && phone && otpVerified && (captchaInput === captchaCode) ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
+                            >
+                                Review & Pay <ArrowRight size={18} />
+                            </button>
+                        )}
+                        {step === 6 && (
                             <button
                                 disabled={loading}
                                 onClick={handleConfirmBooking}
-                                className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg shadow-[#00E6A0]/20 bg-[#00E6A0] hover:bg-white active:scale-95 transition-all`}
+                                className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${!loading ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed'}`}
                             >
-                                {loading ? 'Processing...' : `Pay & Confirm Ritual • ₹${totalPrice}`}
+                                {loading ? 'Processing Ritual...' : `Pay ₹${totalPrice}`} <Check size={20} />
                             </button>
                         )}
                     </div>

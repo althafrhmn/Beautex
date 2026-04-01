@@ -9,7 +9,9 @@ import {
     updateStaffProfile,
     getStaffBookings,
     updateStaffBookingStatus,
-    getStaffDashboardStats
+    getStaffDashboardStats,
+    getStaffServices,
+    assignStaffServices
 } from '../controllers/staffController.js';
 
 const router = express.Router();
@@ -22,6 +24,8 @@ router.get('/all', restrictTo('admin', 'manager'), getAllStaff);
 router.post('/create', restrictTo('admin', 'manager'), createStaff);
 router.put('/:id', restrictTo('admin', 'manager'), updateStaff);
 router.delete('/:id', restrictTo('admin', 'manager'), deleteStaff);
+router.get('/:id/services', restrictTo('admin', 'manager'), getStaffServices);
+router.put('/:id/services', restrictTo('admin', 'manager'), assignStaffServices);
 
 // === Staff self-service routes ===
 router.get('/me/profile', restrictTo('staff'), getStaffProfile);

@@ -246,3 +246,51 @@ export const getStaffDashboardStats = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+// Get services assigned to a staff member
+export const getStaffServices = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { data, error } = await supabase
+            .from('staff_services')
+            .select('service_id, services(id, name, category, price, duration_minutes)')
+            .eq('staff_id', id);
+
+        if (error) throw error;
+
+        const services = (data || []).map(row => row.services).filter(Boolean);
+        res.status(200).json({ services });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// Assign services to a staff member
+export const assignStaffServices = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { services } = req.body; // array of service IDs
+
+        // Delete existing
+        await supabaseAdmin
+            .from('staff_services')
+            .delete()
+            .eq('staff_id', id);
+
+        // Insert new
+        if (services && services.length > 0) {
+            const rows = services.map(sId => ({ 
+                staff_id: id, 
+                service_id: sId 
+            }));
+            const { error } = await supabaseAdmin
+                .from('staff_services')
+                .insert(rows);
+            if (error) throw error;
+        }
+
+        res.status(200).json({ message: 'Staff services updated' });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+    }
+};

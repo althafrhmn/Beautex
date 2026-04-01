@@ -122,12 +122,22 @@ export const getSalonServices = async (req, res) => {
         const { id } = req.params;
         const { data, error } = await supabase
             .from('salon_services')
-            .select('service_id, services(id, name, category, price, duration_minutes)')
+            .select('service_id, price, services(id, name, category, price, duration_minutes)')
             .eq('salon_id', id);
 
         if (error) throw error;
 
-        const services = (data || []).map(row => row.services).filter(Boolean);
+        // Map it so the custom price is returned
+        const services = (data || []).map(row => {
+            if (!row.services) return null;
+            return {
+                ...row.services,
+                default_price: row.services.price, // original price
+                price: row.price || row.services.price, // override with custom if exists
+                is_custom_price: !!row.price
+            };
+        }).filter(Boolean);
+
         res.status(200).json({ services });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -138,7 +148,7 @@ export const getSalonServices = async (req, res) => {
 export const assignSalonServices = async (req, res) => {
     try {
         const { id } = req.params;
-        const { serviceIds } = req.body; // array of service UUIDs
+        const { services } = req.body; // array of { service_id, price } objects
 
         // Delete all current assignments for this salon
         await supabaseAdmin
@@ -147,8 +157,12 @@ export const assignSalonServices = async (req, res) => {
             .eq('salon_id', id);
 
         // Insert new assignments (skip if empty)
-        if (serviceIds && serviceIds.length > 0) {
-            const rows = serviceIds.map(service_id => ({ salon_id: id, service_id }));
+        if (services && services.length > 0) {
+            const rows = services.map(s => ({ 
+                salon_id: id, 
+                service_id: s.service_id,
+                price: s.price || null
+            }));
             const { error } = await supabaseAdmin
                 .from('salon_services')
                 .insert(rows);

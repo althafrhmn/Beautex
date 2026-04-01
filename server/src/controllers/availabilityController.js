@@ -4,13 +4,32 @@ import supabase from '../config/supabaseClient.js';
 export const getStaffForSalon = async (req, res) => {
     try {
         const { salon_id } = req.params;
-        // This is a simplification. Usually staff are linked to salons via a join table.
-        // For now, we'll return all staff members from profiles.
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('id, full_name, avatar_url, role')
-            .eq('role', 'staff');
+        const { service_id } = req.query;
 
+        let query = supabase
+            .from('profiles')
+            .select('id, full_name, avatar_url, role, specialization, assigned_shop')
+            .eq('role', 'staff')
+            .eq('assigned_shop', salon_id);
+
+        if (service_id && service_id !== 'undefined' && service_id !== 'null') {
+            // Find staff who can perform this service
+            const { data: ssData, error: ssError } = await supabase
+                .from('staff_services')
+                .select('staff_id')
+                .eq('service_id', service_id);
+            
+            if (ssError) throw ssError;
+            
+            const staffIds = (ssData || []).map(s => s.staff_id);
+            // If nobody is assigned, return empty list (correct behavior)
+            if (staffIds.length === 0) {
+                return res.status(200).json({ staff: [] });
+            }
+            query = query.in('id', staffIds);
+        }
+
+        const { data, error } = await query;
         if (error) throw error;
 
         res.status(200).json({ staff: data });

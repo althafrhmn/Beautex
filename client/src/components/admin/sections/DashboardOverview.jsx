@@ -8,7 +8,16 @@ import {
     Store,
     Clock,
     UserPlus,
-    Calendar as CalendarIcon
+    Calendar as CalendarIcon,
+    Edit2,
+    Save,
+    X,
+    MapPin,
+    Building,
+    Image as ImageIcon,
+    Globe,
+    Phone,
+    Check
 } from 'lucide-react';
 import api from '../../../utils/api';
 import {
@@ -63,19 +72,25 @@ const DashboardOverview = () => {
     });
     const [chartData, setChartData] = useState({ revenue: {}, dailyBookings: {}, recentActivities: [] });
     const [loading, setLoading] = useState(true);
+    
+    // Salon Edit States
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editFormData, setEditFormData] = useState(null);
+    const [saving, setSaving] = useState(false);
+
+    const fetchStats = async () => {
+        try {
+            const response = await api.get('/admin/stats');
+            setStats(response.data.stats || {});
+            setChartData(response.data.charts || { revenue: {}, dailyBookings: {}, recentActivities: [] });
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchStats = async () => {
-            try {
-                const response = await api.get('/admin/stats');
-                setStats(response.data.stats || {});
-                setChartData(response.data.charts || { revenue: {}, dailyBookings: {}, recentActivities: [] });
-            } catch (error) {
-                console.error('Error fetching stats:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchStats();
     }, []);
 
@@ -134,12 +149,201 @@ const DashboardOverview = () => {
 
     return (
         <div className="space-y-8 font-sans">
-            <div className="flex justify-between items-end mb-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-white">Dashboard Overview</h2>
+                    <h2 className="text-2xl font-bold tracking-tight text-white font-sans">Dashboard Overview</h2>
                     <p className="text-gray-400 text-sm mt-1">Real-time performance analytics for BeauteX</p>
                 </div>
+
+                {stats.currentSalon && (
+                    <div className="bg-[#141414] border border-[#00E6A0]/20 rounded-2xl p-4 flex items-center gap-4 shadow-lg shadow-[#00E6A0]/5 animate-in slide-in-from-right duration-700">
+                        <div className="w-12 h-12 rounded-xl bg-[#00E6A0]/10 flex items-center justify-center text-[#00E6A0]">
+                            <Store size={24} />
+                        </div>
+                        <div className="pr-4 border-r border-[#2A2A2A]">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-[#00E6A0]">Active Sanctuary</p>
+                            <h4 className="text-lg font-black text-white leading-tight">{stats.currentSalon.name}</h4>
+                        </div>
+                        <button 
+                            onClick={() => {
+                                setEditFormData({
+                                    ...stats.currentSalon,
+                                    location: stats.currentSalon.address,
+                                    opening_time: stats.currentSalon.hours?.split(' - ')[0] || '',
+                                    closing_time: stats.currentSalon.hours?.split(' - ')[1] || ''
+                                });
+                                setIsEditModalOpen(true);
+                            }}
+                            className="p-2.5 rounded-xl bg-[#00E6A0] text-[#141414] hover:bg-white transition-all transform hover:scale-105 active:scale-95 shadow-md shadow-[#00E6A0]/20"
+                            title="Edit Salon Profile"
+                        >
+                            <Edit2 size={18} />
+                        </button>
+                    </div>
+                )}
             </div>
+
+            {/* Quick Salon Edit Modal */}
+            {isEditModalOpen && editFormData && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/90 backdrop-blur-md" onClick={() => setIsEditModalOpen(false)} />
+                    <div className="relative w-full max-w-lg bg-[#0F1115] border border-[#2A2A2A] rounded-[2.5rem] shadow-2xl p-8 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <p className="text-[#00E6A0] text-[10px] font-black uppercase tracking-widest mb-1">Salon Identity</p>
+                                <h3 className="text-2xl font-black text-white">Edit Sanctuary Profile</h3>
+                            </div>
+                            <button onClick={() => setIsEditModalOpen(false)} className="p-3 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-2xl transition-all">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            setSaving(true);
+                            try {
+                                await api.put(`/shops/${editFormData.id}`, editFormData);
+                                setIsEditModalOpen(false);
+                                fetchStats();
+                            } catch (error) {
+                                console.error('Error updating shop:', error);
+                                alert('Failed to update shop. Please try again.');
+                            } finally {
+                                setSaving(false);
+                            }
+                        }} className="space-y-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Shop Name</label>
+                                    <div className="relative">
+                                        <Building className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                        <input
+                                            type="text"
+                                            required
+                                            className="w-full bg-[#141414] border border-[#2A2A2A] rounded-2xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-all"
+                                            value={editFormData.name}
+                                            onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Address & Location</label>
+                                    <div className="relative">
+                                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                        <input
+                                            type="text"
+                                            required
+                                            className="w-full bg-[#141414] border border-[#2A2A2A] rounded-2xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-all"
+                                            value={editFormData.location}
+                                            onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Phone</label>
+                                        <div className="relative">
+                                            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                            <input
+                                                type="tel"
+                                                className="w-full bg-[#141414] border border-[#2A2A2A] rounded-2xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-all"
+                                                value={editFormData.phone}
+                                                onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2 px-1">City</label>
+                                        <div className="relative">
+                                            <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                            <input
+                                                type="text"
+                                                className="w-full bg-[#141414] border border-[#2A2A2A] rounded-2xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-all"
+                                                value={editFormData.city}
+                                                onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Opens @</label>
+                                        <div className="relative">
+                                            <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                            <input
+                                                type="time"
+                                                className="w-full bg-[#141414] border border-[#2A2A2A] rounded-2xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-all [color-scheme:dark]"
+                                                value={editFormData.opening_time}
+                                                onChange={(e) => setEditFormData({ ...editFormData, opening_time: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-2 px-1">Closes @</label>
+                                        <div className="relative">
+                                            <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                            <input
+                                                type="time"
+                                                className="w-full bg-[#141414] border border-[#2A2A2A] rounded-2xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-all [color-scheme:dark]"
+                                                value={editFormData.closing_time}
+                                                onChange={(e) => setEditFormData({ ...editFormData, closing_time: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-3 px-1">Shop Image URL</label>
+                                    <div className="relative">
+                                        <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                        <input
+                                            type="text"
+                                            className="w-full bg-[#141414] border border-[#2A2A2A] rounded-2xl pl-12 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-all"
+                                            value={editFormData.image_url}
+                                            onChange={(e) => setEditFormData({ ...editFormData, image_url: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-black uppercase tracking-widest text-gray-500 mb-3 px-1">Salon Specialties</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {['Hair Cutting Styles', 'Beautician Styles', 'Bridal & Makeup', 'Grooming', 'Nail Art', 'Massage & Spa', 'All Related Salon'].map(cat => (
+                                            <button
+                                                key={cat}
+                                                type="button"
+                                                onClick={() => {
+                                                    const current = editFormData.tags || [];
+                                                    const next = current.includes(cat) ? current.filter(c => c !== cat) : [...current, cat];
+                                                    setEditFormData({ ...editFormData, tags: next });
+                                                }}
+                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all border ${editFormData.tags?.includes(cat) ? 'bg-[#00E6A0] border-[#00E6A0] text-[#141414]' : 'bg-white/5 border-white/5 text-gray-500 hover:border-white/10'}`}
+                                            >
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={saving}
+                                className="w-full mt-4 py-4 bg-[#00E6A0] hover:bg-white text-[#141414] rounded-2xl font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 shadow-lg shadow-[#00E6A0]/20 active:scale-95"
+                            >
+                                {saving ? (
+                                    <div className="w-6 h-6 border-4 border-[#141414] border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                    <><Save size={20} /> Update Salon Profile</>
+                                )}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
                 <StatCard label="Total Revenue" value={`₹${parseFloat(stats.totalRevenue).toLocaleString()}`} icon={DollarSign} colorClass="text-[#00E6A0]" />

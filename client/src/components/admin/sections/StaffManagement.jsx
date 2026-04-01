@@ -20,12 +20,19 @@ const StaffManagement = () => {
     const [shopDropdownOpen, setShopDropdownOpen] = useState(false);
     const shopDropdownRef = useRef(null);
 
+    const [allServices, setAllServices] = useState([]);
+    const [assignedServices, setAssignedServices] = useState([]);
+    const [serviceSearch, setServiceSearch] = useState('');
+    const [serviceDropdownOpen, setServiceDropdownOpen] = useState(false);
+    const serviceDropdownRef = useRef(null);
+
     const emptyForm = { fullName: '', email: '', phone: '', password: '', speciality: '', experience: '', assignedShop: '', avatarUrl: '' };
     const [form, setForm] = useState(emptyForm);
 
     useEffect(() => {
         fetchStaff();
         fetchShops();
+        fetchServices();
     }, []);
 
     // Close dropdown on outside click
@@ -33,6 +40,9 @@ const StaffManagement = () => {
         const handler = (e) => {
             if (shopDropdownRef.current && !shopDropdownRef.current.contains(e.target)) {
                 setShopDropdownOpen(false);
+            }
+            if (serviceDropdownRef.current && !serviceDropdownRef.current.contains(e.target)) {
+                setServiceDropdownOpen(false);
             }
         };
         document.addEventListener('mousedown', handler);
@@ -59,10 +69,30 @@ const StaffManagement = () => {
         }
     };
 
+    const fetchServices = async () => {
+        try {
+            const res = await api.get('/services');
+            setAllServices(res.data.services || []);
+        } catch (err) {
+            console.error('Error fetching services:', err);
+        }
+    };
+
+    const fetchStaffServices = async (id) => {
+        try {
+            const res = await api.get(`/staff/${id}/services`);
+            setAssignedServices(res.data.services || []);
+        } catch (err) {
+            console.error('Error fetching staff services:', err);
+        }
+    };
+
     const openAddModal = () => {
         setEditingStaff(null);
         setForm(emptyForm);
         setShopSearch('');
+        setAssignedServices([]);
+        setServiceSearch('');
         setError('');
         setShowModal(true);
     };
@@ -80,8 +110,10 @@ const StaffManagement = () => {
             avatarUrl: member.avatar_url || ''
         });
         setShopSearch(assignedShop);
+        setServiceSearch('');
         setError('');
         setEditingStaff(member);
+        fetchStaffServices(member.id);
         setShowModal(true);
     };
 
@@ -98,11 +130,20 @@ const StaffManagement = () => {
         setSaving(true);
         setError('');
         try {
+            let staffId = editingStaff?.id;
             if (editingStaff) {
-                await api.put(`/staff/${editingStaff.id}`, form);
+                await api.put(`/staff/${staffId}`, form);
             } else {
-                await api.post('/staff/create', form);
+                const res = await api.post('/staff/create', form);
+                staffId = res.data.staff?.id;
             }
+
+            // Save services
+            if (staffId) {
+                const sIds = assignedServices.map(s => s.id);
+                await api.put(`/staff/${staffId}/services`, { services: sIds });
+            }
+
             setShowModal(false);
             fetchStaff();
         } catch (err) {
@@ -120,6 +161,16 @@ const StaffManagement = () => {
         } catch (err) {
             console.error('Error deleting staff:', err);
         }
+    };
+
+    const addStaffService = (s) => {
+        if (assignedServices.some(as => as.id === s.id)) return;
+        setAssignedServices(prev => [...prev, s]);
+        setServiceDropdownOpen(false);
+    };
+
+    const removeStaffService = (id) => {
+        setAssignedServices(prev => prev.filter(s => s.id !== id));
     };
 
     const filteredStaff = staff.filter(s =>
@@ -376,6 +427,57 @@ const StaffManagement = () => {
                                         <Check size={11} /> Assigned to: <span className="font-medium">{form.assignedShop}</span>
                                     </p>
                                 )}
+                            </div>
+
+                            {/* SERVICES ASSIGNMENT SECTION */}
+                            <div className="space-y-3 pt-2" ref={serviceDropdownRef}>
+                                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block flex items-center gap-2">
+                                    <Briefcase size={14} /> Assigned Services
+                                </label>
+                                
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                                    <input 
+                                        type="text" 
+                                        className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0]"
+                                        value={serviceSearch} onChange={(e) => setServiceSearch(e.target.value)}
+                                        onFocus={() => setServiceDropdownOpen(true)}
+                                        placeholder="Find services to assign..." 
+                                    />
+                                    
+                                    {serviceDropdownOpen && (
+                                        <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl shadow-2xl max-h-48 overflow-y-auto overflow-x-hidden">
+                                            {allServices
+                                                .filter(s => s.name?.toLowerCase().includes((serviceSearch || '').toLowerCase()))
+                                                .map(s => (
+                                                    <button key={s.id} type="button" onClick={() => addStaffService(s)} className="w-full text-left px-4 py-3 hover:bg-[#2A2A2A] flex justify-between items-center group border-b border-white/5 last:border-none">
+                                                        <div className="flex-1 overflow-hidden">
+                                                            <p className="text-sm font-bold text-white truncate">{s.name}</p>
+                                                            <p className="text-[10px] text-gray-500 uppercase">₹{s.price} · {s.category}</p>
+                                                        </div>
+                                                        <Plus size={14} className="text-gray-600 group-hover:text-[#00E6A0] transition-colors" />
+                                                    </button>
+                                                ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2 mt-3">
+                                    {assignedServices.map(s => (
+                                        <div key={s.id} className="bg-[#1A1A1A] border border-[#2A2A2A] p-3 rounded-xl flex items-center justify-between group hover:border-[#00E6A0]/30 transition-all">
+                                            <div className="flex-1">
+                                                <p className="text-xs font-bold text-white uppercase">{s.name}</p>
+                                                <p className="text-[10px] text-gray-500 uppercase">₹{s.price} · {s.category}</p>
+                                            </div>
+                                            <button type="button" onClick={() => removeStaffService(s.id)} className="p-1.5 text-gray-600 hover:text-red-400 transition-colors">
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {assignedServices.length === 0 && (
+                                        <p className="text-[10px] text-gray-600 text-center py-2 italic">No services assigned yet</p>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Profile Photo URL */}

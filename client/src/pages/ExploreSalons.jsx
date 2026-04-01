@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -7,6 +7,7 @@ import {
     Sparkles, Compass, LayoutGrid,
     User, Heart, TrendingUp
 } from 'lucide-react';
+import api from '../utils/api';
 
 const ExploreSalons = () => {
     const { category } = useParams();
@@ -14,94 +15,47 @@ const ExploreSalons = () => {
     const location = useLocation();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState(category || 'all');
+    const [salons, setSalons] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     const preselectedService = location.state?.service;
 
-    // High Fidelity Salon Data
-    const salons = [
-        {
-            id: 1,
-            name: "The Palace Sanctuary",
-            address: "Altamount Road",
-            city: "Mumbai",
-            rating: 4.9,
-            reviews: "2.1K",
-            category: "hair",
-            image: "https://images.unsplash.com/photo-1512690196152-730d4375338c?auto=format&fit=crop&q=80&w=800",
-            services: ["Gold Radiance Ritual", "Master Balayage Art"]
-        },
-        {
-            id: 2,
-            name: "Emerald Oasis",
-            address: "Indiranagar",
-            city: "Bangalore",
-            rating: 4.8,
-            reviews: "1.5K",
-            category: "skin",
-            image: "https://images.unsplash.com/photo-1520333789090-1afc82db536a?auto=format&fit=crop&q=80&w=800",
-            services: ["Diamond Micro-Derm", "Azure Oxygen Blast"]
-        },
-        {
-            id: 3,
-            name: "Azure Retreat",
-            address: "Marine Drive",
-            city: "Kochi",
-            rating: 4.9,
-            reviews: "3.2K",
-            category: "skin",
-            image: "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800",
-            services: ["Himalayan Alchemy", "Silk Keratin Infusion"]
-        },
-        {
-            id: 4,
-            name: "Toni&Guy Essensuals",
-            address: "Up Hill",
-            city: "Malappuram",
-            rating: 4.9,
-            reviews: "2.5K",
-            category: "hair",
-            image: "https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=800",
-            services: ["Men's Precision Cut", "Global Luxe Color"]
-        },
-        {
-            id: 5,
-            name: "Golden Hour Studio",
-            address: "Civil Station",
-            city: "Calicut",
-            rating: 4.8,
-            reviews: "1.2K",
-            category: "makeup",
-            image: "https://images.unsplash.com/photo-1595475243692-3a387f34081c?auto=format&fit=crop&q=80&w=800",
-            services: ["Royal Mughal Bridal", "Gold Radiance Ritual"]
-        },
-        {
-            id: 6,
-            name: "Verve Gentlemen",
-            address: "Bypass Road",
-            city: "Perintalmanna",
-            rating: 4.7,
-            reviews: "950",
-            category: "men",
-            image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=800",
-            services: ["Executive Precision", "Beard Sculpting"]
-        },
-        {
-            id: 14,
-            name: "Luxe Nail & Artistry",
-            address: "Palm Avenue",
-            city: "Kottakkal",
-            rating: 4.9,
-            reviews: "450",
-            category: "nails",
-            image: "https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&q=80&w=1200",
-            services: ["Architectural Nails", "3D Nail Master"]
-        }
-    ];
+    useEffect(() => {
+        const fetchSalons = async () => {
+            try {
+                const response = await api.get('/salons');
+                const data = response.data.salons || [];
+                
+                // Map DB salons to UI shape
+                const mapped = data.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    address: s.address || s.location || '—',
+                    city: s.city || 'Global',
+                    rating: s.rating || (4.5 + Math.random() * 0.4).toFixed(1),
+                    reviews: '10+', 
+                    category: s.tags?.includes('Beautician Styles') ? 'skin' : 
+                              s.tags?.includes('Nail Art') ? 'nails' :
+                              s.tags?.includes('Bridal & Makeup') ? 'makeup' :
+                              s.tags?.includes('Grooming') ? 'men' : 'hair',
+                    image: s.image_url || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800",
+                    services: [ "Precision Styling", "Signature Ritual" ]
+                }));
+                setSalons(mapped);
+            } catch (error) {
+                console.error('Error fetching salons:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchSalons();
+    }, []);
 
     const categories = [
         { id: 'all', label: 'All Shops', icon: LayoutGrid },
         { id: 'hair', label: 'Hair Styling', icon: Scissors },
         { id: 'skin', label: 'Skin Clinic', icon: Compass },
+        { id: 'makeup', label: 'Bridal & Makeup', icon: Sparkles },
         { id: 'men', label: "Men's Grooming", icon: TrendingUp },
         { id: 'nails', label: 'Nail Artistry', icon: Heart }
     ];

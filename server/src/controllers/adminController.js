@@ -3,14 +3,21 @@ import supabase, { supabaseAdmin } from '../config/supabaseClient.js';
 // Get comprehensive admin stats - LIVE from database
 export const getAdminStats = async (req, res) => {
     try {
-        // Resiliently fetch customer count
-        let customerCount = 0;
-        const { count: cCount, error: cErr } = await supabase.from('customers').select('*', { count: 'exact', head: true });
-        if (cErr) {
-            const { count: pCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'customer');
-            customerCount = pCount || 0;
-        } else {
-            customerCount = cCount || 0;
+        // 1. Fetch user profile to check assigned shop
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('assigned_shop')
+            .eq('id', req.user.id)
+            .single();
+
+        let currentSalon = null;
+        if (profile?.assigned_shop) {
+            const { data: salon } = await supabase
+                .from('salons')
+                .select('*')
+                .eq('id', profile.assigned_shop)
+                .single();
+            currentSalon = salon;
         }
 
         const [bookingRes, staffRes, shopRes, serviceRes, recentBookings, paymentsRes] = await Promise.all([
@@ -22,7 +29,7 @@ export const getAdminStats = async (req, res) => {
             supabase.from('payments').select('amount, created_at').eq('status', 'completed')
         ]);
 
-        // Resiliently fetch recent customers
+        // ... existing customer logic ...
         let recentCustomersData = [];
         const { data: cData, error: cDataErr } = await supabase.from('customers').select('id, name, created_at').order('created_at', { ascending: false }).limit(5);
         if (cDataErr) {
@@ -34,7 +41,8 @@ export const getAdminStats = async (req, res) => {
 
         const totalRevenue = (paymentsRes.data || []).reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
-        // Combine and sort activities
+        // ... existing activities, chart logic ...
+
         const activities = [
             ...(recentBookings.data || []).map(b => ({
                 id: b.id,
@@ -55,7 +63,6 @@ export const getAdminStats = async (req, res) => {
             }))
         ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 6);
 
-        // Calculate monthly revenue for chart
         const monthlyRevenue = {};
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         (paymentsRes.data || []).forEach(p => {
@@ -64,11 +71,8 @@ export const getAdminStats = async (req, res) => {
             monthlyRevenue[month] = (monthlyRevenue[month] || 0) + parseFloat(p.amount);
         });
 
-        // Calculate weekly bookings density
         const dailyBookings = { 'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0, 'Sun': 0 };
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        
-        // Fetch last 7 days of bookings for density
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
@@ -89,7 +93,8 @@ export const getAdminStats = async (req, res) => {
                 totalStaff: staffRes.count || 0,
                 totalRevenue: totalRevenue.toFixed(2),
                 totalShops: shopRes.count || 0,
-                totalServices: serviceRes.count || 0
+                totalServices: serviceRes.count || 0,
+                currentSalon: currentSalon
             },
             charts: {
                 revenue: monthlyRevenue,

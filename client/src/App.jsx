@@ -17,6 +17,8 @@ import AdminTerminal from './pages/AdminTerminal';
 import AdminLogin from './pages/AdminLogin';
 import StaffDashboard from './pages/StaffDashboard';
 import ServicesPage from './pages/ServicesPage';
+import OffersPage from './pages/OffersPage';
+import ContactPage from './pages/ContactPage';
 
 
 import Navbar from './components/layout/Navbar';
@@ -74,6 +76,8 @@ function App() {
           <Route path="/locations" element={<Locations />} />
           <Route path="/explore/:category" element={<ExploreSalons />} />
           <Route path="/services" element={<ServicesPage />} />
+          <Route path="/offers" element={<OffersPage />} />
+          <Route path="/contact" element={<ContactPage />} />
           <Route path="/salon/:id" element={<SalonDetail />} />
           <Route path="/bookings" element={<PrivateRoute><BookingPage /></PrivateRoute>} />
           <Route path="/my-bookings" element={<PrivateRoute><BookingPage view="history" /></PrivateRoute>} />

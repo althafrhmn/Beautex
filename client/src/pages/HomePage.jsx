@@ -4,7 +4,7 @@ import {
     Scissors, Star, MapPin, Sparkles,
     ArrowRight, Award, Zap, Heart,
     TrendingUp, ShieldCheck, ChevronRight,
-    Store, Users
+    Store, Users, Tag, Globe, Mail, MessageSquare, Phone
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import HomeHeroSlider from '../components/customer/HomeHeroSlider';
@@ -167,6 +167,87 @@ const HomePage = () => {
                 </div>
                 <CardCarousel services={services} />
             </section>
+            
+            {/* Limited Time Offers Section */}
+            <section className="py-32 px-6 border-y border-white/5 bg-[#050505]">
+                <div className="max-w-7xl mx-auto">
+                    <div className="flex flex-col md:flex-row justify-between items-end gap-10 mb-20">
+                        <div className="max-w-2xl">
+                            <p className="text-[#00E6A0] font-black text-[10px] uppercase tracking-[0.4em] mb-6">Exclusive Privileges</p>
+                            <h2 className="text-5xl md:text-7xl font-black tracking-tighter leading-none mb-4">
+                                Limited <span className="text-gray-500">Offers</span>
+                            </h2>
+                        </div>
+                        <button 
+                            onClick={() => navigate('/offers')}
+                            className="bg-white/5 hover:bg-[#00E6A0] text-white hover:text-black px-8 py-4 rounded-2xl font-bold transition-all flex items-center gap-3 border border-white/10 hover:border-transparent group"
+                        >
+                            View All Offers <Tag size={18} className="text-[#00E6A0] group-hover:text-black" />
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        {[
+                            {
+                                title: "Bridal Bliss Portfolio",
+                                price: "4,999",
+                                type: "Salon",
+                                image: "https://images.unsplash.com/photo-1594465919760-441fe5908ab0?auto=format&fit=crop&q=80&w=800",
+                                tag: "PROMO"
+                            },
+                            {
+                                title: "Executive Grooming",
+                                price: "1,200",
+                                type: "Beautician",
+                                image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=800",
+                                tag: "WEEKEND"
+                            },
+                            {
+                                title: "Silk Keratin Ritual",
+                                price: "2,499",
+                                type: "Salon",
+                                image: "https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=800",
+                                tag: "LUXE"
+                            }
+                        ].map((offer, i) => (
+                            <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 20 }}
+                                whileInView={{ opacity: 1, y: 0 }}
+                                viewport={{ once: true }}
+                                transition={{ delay: i * 0.1 }}
+                                className="group relative h-[400px] rounded-[3rem] overflow-hidden border border-white/5 cursor-pointer"
+                                onClick={() => navigate('/offers')}
+                            >
+                                <img 
+                                    src={offer.image} 
+                                    alt={offer.title}
+                                    className="absolute inset-0 w-full h-full object-cover grayscale opacity-40 group-hover:grayscale-0 group-hover:opacity-60 transition-all duration-1000 group-hover:scale-110"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+                                
+                                <div className="absolute top-6 left-6 px-4 py-1.5 bg-[#00E6A0] text-black text-[10px] font-black uppercase tracking-widest rounded-full">
+                                    {offer.tag}
+                                </div>
+
+                                <div className="absolute inset-0 p-10 flex flex-col justify-end">
+                                    <p className="text-[#00E6A0] text-[10px] font-black uppercase tracking-[0.4em] mb-2">{offer.type}</p>
+                                    <h3 className="text-3xl font-black text-white mb-6 group-hover:translate-x-2 transition-transform duration-500">{offer.title}</h3>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex flex-col">
+                                            <span className="text-gray-500 text-[10px] uppercase font-black tracking-widest">Starts from</span>
+                                            <span className="text-2xl font-black text-white">₹{offer.price}</span>
+                                        </div>
+                                        <div className="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center group-hover:bg-[#00E6A0] group-hover:text-black transition-all">
+                                            <ArrowRight size={20} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+            </section>
 
             {/* Our Salons Section - NEW */}
             <section className="py-32 px-6 bg-[#0A0A0A]/50">
@@ -220,6 +301,72 @@ const HomePage = () => {
                                 </div>
                             </motion.div>
                         ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* New Concierge Contact Section */}
+            <section className="py-40 px-6 bg-[#050505]">
+                <div className="max-w-7xl mx-auto border border-white/5 bg-[#0A0A0A] rounded-[4rem] p-12 md:p-24 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-16 text-[#00E6A0] opacity-5 -mr-10 -mt-10 rotate-12"><Globe size={240} /></div>
+                    
+                    <div className="flex flex-col lg:flex-row justify-between items-start gap-20 relative z-10">
+                        <div className="max-w-2xl">
+                            <p className="text-[#00E6A0] font-black text-[10px] uppercase tracking-[0.5em] mb-8">Establish Connection</p>
+                            <h2 className="text-5xl md:text-7xl font-black text-white tracking-tighter leading-none mb-10">The Desk of <br /> <span className="text-gray-500 italic font-medium">Beautex Concierge</span></h2>
+                            <p className="text-gray-500 text-xl font-medium leading-relaxed italic mb-12">
+                                We connect elite artists with the most discerning clients. Our desk provides 
+                                world-class support for your transformation journey. We aim to reply within 24 hours.
+                            </p>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-12 text-left">
+                                <div className="space-y-2">
+                                    <h4 className="text-[10px] font-black text-[#00E6A0] uppercase tracking-widest">Main Channel</h4>
+                                    <p className="text-white font-black text-lg">contact@beautex.com</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <h4 className="text-[10px] font-black text-[#00E6A0] uppercase tracking-widest">General HQ</h4>
+                                    <p className="text-white font-black text-lg">Calicut, Kerala</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="w-full lg:w-auto flex flex-col gap-4">
+                            <a 
+                                href="tel:9961876122" 
+                                className="group flex items-center gap-6 p-8 bg-white/5 hover:bg-[#00E6A0] rounded-[2.5rem] border border-white/5 transition-all duration-500 no-underline"
+                            >
+                                <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-white group-hover:bg-black/20 group-hover:text-black transition-all">
+                                    <Phone size={28} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#00E6A0] group-hover:text-black mb-1">Call Now</p>
+                                    <p className="text-2xl font-black text-white group-hover:text-black tracking-tight">+9961876122</p>
+                                </div>
+                            </a>
+
+                            <a 
+                                href="https://wa.me/9961876122" 
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="group flex items-center gap-6 p-8 bg-white/5 hover:bg-[#25D366] rounded-[2.5rem] border border-white/5 transition-all duration-500 no-underline"
+                            >
+                                <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center text-white group-hover:bg-black/20 group-hover:text-white transition-all">
+                                    <MessageSquare size={28} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-[#00E6A0] group-hover:text-white mb-1">WhatsApp</p>
+                                    <p className="text-2xl font-black text-white group-hover:text-white tracking-tight">Instant Text</p>
+                                </div>
+                            </a>
+
+                            <button 
+                                onClick={() => navigate('/contact')}
+                                className="mt-8 px-10 py-5 bg-white/5 hover:bg-white/10 text-white rounded-[2rem] font-black text-[10px] uppercase tracking-widest border border-white/10 flex items-center justify-center gap-3 transition-all"
+                            >
+                                Detailed Inquiry <ChevronRight size={16} />
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
