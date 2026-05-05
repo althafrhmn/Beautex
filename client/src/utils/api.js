@@ -2,11 +2,11 @@ import axios from 'axios';
 import { supabase } from './supabaseClient';
 
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api',
+    baseURL: import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
     headers: { 'Content-Type': 'application/json' },
 });
 
-const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/auth/forgot-password'];
+const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/auth/forgot-password', '/auth/request-otp', '/auth/verify-otp'];
 
 api.interceptors.request.use(async (config) => {
     const isPublicRoute = PUBLIC_ROUTES.some(route => config.url?.includes(route));

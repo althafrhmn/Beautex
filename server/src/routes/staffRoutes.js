@@ -11,7 +11,8 @@ import {
     updateStaffBookingStatus,
     getStaffDashboardStats,
     getStaffServices,
-    assignStaffServices
+    assignStaffServices,
+    getStaffExecutiveReport
 } from '../controllers/staffController.js';
 
 const router = express.Router();
@@ -30,8 +31,9 @@ router.put('/:id/services', restrictTo('admin', 'manager'), assignStaffServices)
 // === Staff self-service routes ===
 router.get('/me/profile', restrictTo('staff'), getStaffProfile);
 router.put('/me/profile', restrictTo('staff'), updateStaffProfile);
-router.get('/me/bookings', restrictTo('staff'), getStaffBookings);
-router.patch('/me/bookings/:id/status', restrictTo('staff'), updateStaffBookingStatus);
-router.get('/me/dashboard', restrictTo('staff'), getStaffDashboardStats);
+router.get('/me/bookings', restrictTo('staff', 'manager'), getStaffBookings);
+router.patch('/me/bookings/:id/status', restrictTo('staff', 'manager'), updateStaffBookingStatus);
+router.get('/me/dashboard', restrictTo('staff', 'manager'), getStaffDashboardStats);
+router.get('/me/report', restrictTo('staff', 'manager'), getStaffExecutiveReport);
 
 export default router;

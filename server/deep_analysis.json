@@ -1,0 +1,40 @@
+{
+  "salonMap": {
+    "Radhas Bridal studio": "1effd55b-ad0e-4972-9aa4-33bd3e49b93c",
+    "Haircraft": "150f7978-142f-4859-973c-de40dcba1f4a",
+    "Hair port": "39ab2187-c41b-4895-a411-b44fb7812721",
+    "Nafi Salon Vaaplimuk": "d217a02d-091b-48f4-ac2a-160bff4179c9",
+    "Laika": "8ba62cb2-75a5-4bed-8d1d-78aa914ecfe0"
+  },
+  "staffCount": 6,
+  "inconsistentStaffCount": 5,
+  "inconsistentStaffEmails": [
+    "shifna@gmail.com",
+    "jinsila@gmail.com",
+    "nafihn@gmail.com",
+    "Saufeer@gmail.com",
+    "qader@gmail.com"
+  ],
+  "bookingSummary": {
+    "Radhas Bridal studio": {
+      "id": "1effd55b-ad0e-4972-9aa4-33bd3e49b93c",
+      "bookingCount": 10
+    },
+    "Haircraft": {
+      "id": "150f7978-142f-4859-973c-de40dcba1f4a",
+      "bookingCount": 1
+    },
+    "Hair port": {
+      "id": "39ab2187-c41b-4895-a411-b44fb7812721",
+      "bookingCount": 12
+    },
+    "Nafi Salon Vaaplimuk": {
+      "id": "d217a02d-091b-48f4-ac2a-160bff4179c9",
+      "bookingCount": 15
+    },
+    "Laika": {
+      "id": "8ba62cb2-75a5-4bed-8d1d-78aa914ecfe0",
+      "bookingCount": 2
+    }
+  }
+}

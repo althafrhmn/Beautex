@@ -6,90 +6,95 @@ export const getAdminStats = async (req, res) => {
         // 1. Fetch user profile to check assigned shop
         const { data: profile } = await supabase
             .from('profiles')
-            .select('assigned_shop')
+            .select('assigned_shop, role')
             .eq('id', req.user.id)
             .single();
 
+        const salonId = profile?.assigned_shop;
+        
         let currentSalon = null;
-        if (profile?.assigned_shop) {
+        if (salonId) {
             const { data: salon } = await supabase
                 .from('salons')
                 .select('*')
-                .eq('id', profile.assigned_shop)
+                .eq('id', salonId)
                 .single();
             currentSalon = salon;
         }
 
-        const [bookingRes, staffRes, shopRes, serviceRes, recentBookings, paymentsRes] = await Promise.all([
-            supabase.from('bookings').select('*', { count: 'exact', head: true }),
-            supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'staff'),
-            supabase.from('salons').select('*', { count: 'exact', head: true }),
-            supabase.from('services').select('*', { count: 'exact', head: true }),
-            supabase.from('bookings').select('id, booking_number, created_at, status, customer:customer_id(full_name)').order('created_at', { ascending: false }).limit(5),
-            supabase.from('payments').select('amount, created_at').eq('status', 'completed')
-        ]);
+        // Initialize queries
+        let bookingsQuery = supabaseAdmin.from('bookings').select('*, customer:customer_id(id, full_name, email)');
+        let staffQuery = supabaseAdmin.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'staff');
+        let shopsQuery = supabaseAdmin.from('salons').select('*', { count: 'exact', head: true });
+        let servicesQuery = supabaseAdmin.from('services').select('*', { count: 'exact', head: true });
 
-        // ... existing customer logic ...
-        let recentCustomersData = [];
-        const { data: cData, error: cDataErr } = await supabase.from('customers').select('id, name, created_at').order('created_at', { ascending: false }).limit(5);
-        if (cDataErr) {
-            const { data: pData } = await supabase.from('profiles').select('id, name:full_name, created_at').eq('role', 'customer').order('created_at', { ascending: false }).limit(5);
-            recentCustomersData = pData || [];
-        } else {
-            recentCustomersData = cData || [];
+        // Apply owner/manager filters
+        if (salonId) {
+            bookingsQuery = bookingsQuery.eq('salon_id', salonId);
+            staffQuery = staffQuery.eq('assigned_shop', salonId);
+            shopsQuery = shopsQuery.eq('id', salonId);
+            // Services table doesn't have salon_id, they are global. Or mapped via staff_services. 
+            // We'll skip filtering services count for now, it's a global catalog.
         }
 
-        const totalRevenue = (paymentsRes.data || []).reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
+        const [bookingRes, staffRes, shopRes, serviceRes] = await Promise.all([
+            bookingsQuery,
+            staffQuery,
+            shopsQuery,
+            servicesQuery
+        ]);
 
-        // ... existing activities, chart logic ...
+        const allBookings = bookingRes.data || [];
 
-        const activities = [
-            ...(recentBookings.data || []).map(b => ({
-                id: b.id,
-                type: 'booking',
-                title: b.customer?.full_name || 'Anonymous',
-                subtitle: `Booking #${b.booking_number}`,
-                time: b.created_at,
-                status: b.status,
-                meta: b.booking_number
-            })),
-            ...(recentCustomersData).map(c => ({
-                id: c.id,
-                type: 'registration',
-                title: c.name || 'New Member',
-                subtitle: 'New Profile Registered',
-                time: c.created_at,
-                status: 'new'
-            }))
-        ].sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 6);
+        // 2. Compute accurate stats from the exact bookings matched
+        // Count unique customers who have booked at this shop
+        const uniqueCustomerIds = new Set();
+        allBookings.forEach(b => {
+            if (b.customer_id) uniqueCustomerIds.add(b.customer_id);
+            else if (b.guest_email) uniqueCustomerIds.add(b.guest_email); // fallback
+        });
+        const totalCustomers = uniqueCustomerIds.size;
 
+        // Calculate Revenue from confirmed/completed bookings
+        const revenueBookings = allBookings.filter(b => b.status === 'confirmed' || b.status === 'completed');
+        const totalRevenue = revenueBookings.reduce((sum, b) => sum + parseFloat(b.total_price || 0), 0);
+
+        // Chart 1: Monthly Revenue
         const monthlyRevenue = {};
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        (paymentsRes.data || []).forEach(p => {
-            const date = new Date(p.created_at);
+        revenueBookings.forEach(b => {
+            const date = new Date(b.created_at || b.booking_date);
             const month = months[date.getMonth()];
-            monthlyRevenue[month] = (monthlyRevenue[month] || 0) + parseFloat(p.amount);
+            monthlyRevenue[month] = (monthlyRevenue[month] || 0) + parseFloat(b.total_price || 0);
         });
 
+        // Chart 2: Daily Bookings (Last 7 Days)
         const dailyBookings = { 'Mon': 0, 'Tue': 0, 'Wed': 0, 'Thu': 0, 'Fri': 0, 'Sat': 0, 'Sun': 0 };
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
-        const { data: recentBookingsData } = await supabase
-            .from('bookings')
-            .select('created_at')
-            .gte('created_at', sevenDaysAgo.toISOString());
-
-        recentBookingsData?.forEach(b => {
+        allBookings.filter(b => new Date(b.created_at) >= sevenDaysAgo).forEach(b => {
             const day = days[new Date(b.created_at).getDay()];
             dailyBookings[day] = (dailyBookings[day] || 0) + 1;
         });
 
+        // Recent Activity Monitor: top 6 latest bookings
+        const sortedBookings = [...allBookings].sort((a, b) => new Date(b.created_at) < new Date(a.created_at) ? 1 : -1).slice(0, 6);
+        const activities = sortedBookings.map(b => ({
+            id: b.id,
+            type: 'booking',
+            title: b.customer?.full_name || b.guest_email || 'Guest User',
+            subtitle: `Booking #${b.booking_number}`,
+            time: b.created_at,
+            status: b.status,
+            meta: b.booking_number
+        }));
+
         res.status(200).json({
             stats: {
-                totalBookings: bookingRes.count || 0,
-                totalCustomers: customerCount,
+                totalBookings: allBookings.length,
+                totalCustomers: totalCustomers,
                 totalStaff: staffRes.count || 0,
                 totalRevenue: totalRevenue.toFixed(2),
                 totalShops: shopRes.count || 0,
@@ -103,6 +108,7 @@ export const getAdminStats = async (req, res) => {
             }
         });
     } catch (error) {
+        console.error('getAdminStats Error:', error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -110,53 +116,59 @@ export const getAdminStats = async (req, res) => {
 // Get deep analytics for ReportStation
 export const getAdminAnalytics = async (req, res) => {
     try {
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('assigned_shop')
+            .eq('id', req.user.id)
+            .single();
+
+        const salonId = profile?.assigned_shop;
+
+        let bookingsQuery = supabaseAdmin.from('bookings').select('*, staff:staff_id(id, full_name, role)');
+        if (salonId) {
+            bookingsQuery = bookingsQuery.eq('salon_id', salonId);
+        }
+
+        const { data: allBookings } = await bookingsQuery;
+        const revenueBookings = (allBookings || []).filter(b => b.status === 'confirmed' || b.status === 'completed');
+
         // 1. Revenue by Month
-        const { data: payments } = await supabase
-            .from('payments')
-            .select('amount, created_at')
-            .eq('status', 'completed');
-        
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const revenueByMonth = months.map(m => ({ month: m, value: 0 }));
         
-        payments?.forEach(p => {
-            const date = new Date(p.created_at);
+        revenueBookings.forEach(b => {
+            const date = new Date(b.created_at || b.booking_date);
             const monthIdx = date.getMonth();
-            revenueByMonth[monthIdx].value += parseFloat(p.amount);
+            revenueByMonth[monthIdx].value += parseFloat(b.total_price || 0);
         });
 
         // 2. Popular Services
-        const { data: bookingServices } = await supabase
-            .from('booking_services')
-            .select('price_at_booking, services(name)');
+        let bsQuery = supabaseAdmin.from('booking_services').select('price_at_booking, services(name), bookings!inner(salon_id)');
+        if (salonId) {
+            bsQuery = bsQuery.eq('bookings.salon_id', salonId);
+        }
+        const { data: bookingServices } = await bsQuery;
         
         const serviceStats = {};
         bookingServices?.forEach(bs => {
             const name = bs.services?.name || 'Unknown';
             if (!serviceStats[name]) serviceStats[name] = { name, count: 0, revenue: 0 };
             serviceStats[name].count += 1;
-            serviceStats[name].revenue += parseFloat(bs.price_at_booking);
+            serviceStats[name].revenue += parseFloat(bs.price_at_booking || 0);
         });
         const popularServices = Object.values(serviceStats).sort((a, b) => b.count - a.count).slice(0, 5);
 
         // 3. Staff Performance
-        const { data: staffProfiles } = await supabase
-            .from('profiles')
-            .select('id, full_name')
-            .eq('role', 'staff');
-        
-        const { data: allBookings } = await supabase
-            .from('bookings')
-            .select('staff_id, status');
-
-        const staffPerformance = staffProfiles?.map(s => {
-            const bookings = allBookings?.filter(b => b.staff_id === s.id && b.status === 'completed').length || 0;
-            return {
-                name: s.full_name,
-                bookings,
-                rating: (4.5 + Math.random() * 0.5).toFixed(1) // Faking rating for now
-            };
-        }) || [];
+        const staffMap = {};
+        revenueBookings.forEach(b => {
+            if (b.staff) {
+                if (!staffMap[b.staff.id]) {
+                    staffMap[b.staff.id] = { name: b.staff.full_name, bookings: 0, rating: (4.5 + Math.random() * 0.5).toFixed(1) };
+                }
+                staffMap[b.staff.id].bookings += 1;
+            }
+        });
+        const staffPerformance = Object.values(staffMap);
 
         res.status(200).json({
             revenueByMonth,
@@ -164,6 +176,7 @@ export const getAdminAnalytics = async (req, res) => {
             staffPerformance
         });
     } catch (error) {
+        console.error('getAdminAnalytics Error:', error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -348,7 +361,7 @@ export const deleteAdmin = async (req, res) => {
 
 // Create a new Admin/Manager/Receptionist
 export const createAdminUser = async (req, res) => {
-    const { email, password, fullName, role, phone } = req.body;
+    const { email, password, fullName, role, phone, assignedShop, managerPin } = req.body;
     
     // Safety: Ensure only valid roles can be assigned via this endpoint
     const validRoles = ['admin', 'manager', 'receptionist'];
@@ -376,7 +389,10 @@ export const createAdminUser = async (req, res) => {
                     id: userId,
                     full_name: fullName,
                     email: email,
-                    role: role
+                    role: role,
+                    phone_number: phone,
+                    assigned_shop: assignedShop || null,
+                    manager_pin: role === 'manager' ? (managerPin || '1234') : null
                 });
             
             if (profErr) throw profErr;
@@ -385,5 +401,20 @@ export const createAdminUser = async (req, res) => {
         res.status(201).json({ message: `${role} created successfully`, userId });
     } catch (error) {
         res.status(400).json({ error: error.message });
+    }
+};
+// Get all registered managers (Shop Owners)
+export const getAllManagers = async (req, res) => {
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, role, avatar_url, assigned_shop')
+            .or('role.eq.manager,and(role.eq.staff,assigned_shop.not.is.null)')
+            .order('full_name');
+        
+        if (error) throw error;
+        res.status(200).json({ managers: data || [] });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 };

@@ -1,4 +1,4 @@
-import supabase from '../config/supabaseClient.js';
+import supabase, { supabaseAdmin } from '../config/supabaseClient.js';
 
 
 // Create a new booking
@@ -12,10 +12,29 @@ export const createBooking = async (req, res) => {
             start_time,
             notes,
             payment_method,
-            customer_id: body_customer_id
+            payment_type,
+            customer_id: body_customer_id,
+            use_points,
+            guest_name,
+            guest_email,
+            guest_phone,
+            products
         } = req.body;
 
-        const customer_id = body_customer_id || req.user.id;
+        // Resolve customer_id — priority: explicitly passed > logged-in user > email lookup (registered account)
+        let customer_id = body_customer_id || (req.user ? req.user.id : null);
+
+        // If still no customer_id but a guest_email was provided, check if it belongs to a registered user
+        if (!customer_id && guest_email) {
+            const { data: matchedProfile } = await supabaseAdmin
+                .from('profiles')
+                .select('id')
+                .eq('email', guest_email)
+                .maybeSingle();
+            if (matchedProfile?.id) {
+                customer_id = matchedProfile.id;
+            }
+        }
 
         // 1. Fetch service details to calculate duration and total price
         const { data: services, error: servicesError } = await supabase
@@ -25,12 +44,38 @@ export const createBooking = async (req, res) => {
 
         if (servicesError) throw servicesError;
 
-        let total_price = 0;
+        let base_total_price = 0;
         let total_duration = 0;
         services.forEach(s => {
-            total_price += parseFloat(s.price);
+            base_total_price += parseFloat(s.price);
             total_duration += s.duration_minutes;
         });
+
+        let product_total = 0;
+        if (products && products.length > 0) {
+            products.forEach(p => {
+                product_total += parseFloat(p.price) * p.quantity;
+            });
+        }
+        base_total_price += product_total;
+
+        // Loyalty points discount logic
+        let points_used = 0;
+        let total_price = base_total_price;
+
+        if (use_points && customer_id) {
+            const { data: profile } = await supabaseAdmin
+                .from('profiles')
+                .select('loyalty_points')
+                .eq('id', customer_id)
+                .single();
+                
+            if (profile && profile.loyalty_points >= 100) {
+                const maxDiscountAllowed = Math.floor(base_total_price * 0.20);
+                points_used = Math.min(profile.loyalty_points, maxDiscountAllowed);
+                total_price = base_total_price - points_used;
+            }
+        }
 
         // Calculate end_time based on start_time and total_duration
         const [hours, minutes] = start_time.split(':').map(Number);
@@ -38,13 +83,10 @@ export const createBooking = async (req, res) => {
         const endDate = new Date(startDate.getTime() + total_duration * 60000);
         const end_time = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}`;
 
-        // 2. Double-booking prevention
-        const overlapFilter = `start_time.lt.${end_time},end_time.gt.${start_time}`;
-
-        // Always check salon-level conflicts (catches all bookings regardless of staff)
-        const { data: salonOverlap, error: salonOverlapError } = await supabase
+        // 2. Double-booking prevention with Capacity Check
+        const { data: salonBookings, error: salonOverlapError } = await supabase
             .from('bookings')
-            .select('id')
+            .select('id, staff_id')
             .eq('salon_id', salon_id)
             .eq('booking_date', booking_date)
             .neq('status', 'cancelled')
@@ -52,32 +94,34 @@ export const createBooking = async (req, res) => {
             .gt('end_time', start_time);
 
         if (salonOverlapError) throw salonOverlapError;
-        if (salonOverlap && salonOverlap.length > 0) {
-            return res.status(400).json({ error: 'This time slot is already booked. Please choose a different time.' });
-        }
 
-        // Also check staff-level conflicts if a specific staff is assigned
         if (staff_id) {
-            const { data: staffOverlap, error: staffOverlapError } = await supabase
-                .from('bookings')
+            // Case 1: Specific staff selected - Block only if THAT staff is busy
+            const isStaffBusy = (salonBookings || []).some(b => b.staff_id === staff_id);
+            if (isStaffBusy) {
+                return res.status(400).json({ error: 'The selected staff is already booked for this time slot.' });
+            }
+        } else {
+            // Case 2: No specific staff (Auto/Any) - Block if ALL staff are busy
+            const { data: workingStaff } = await supabase
+                .from('profiles')
                 .select('id')
-                .eq('staff_id', staff_id)
-                .eq('booking_date', booking_date)
-                .neq('status', 'cancelled')
-                .lt('start_time', end_time)
-                .gt('end_time', start_time);
+                .eq('role', 'staff')
+                .eq('assigned_shop', salon_id);
 
-            if (staffOverlapError) throw staffOverlapError;
-            if (staffOverlap && staffOverlap.length > 0) {
-                return res.status(400).json({ error: 'Selected staff is not available at this time.' });
+            const totalStaffCount = workingStaff?.length || 1;
+            const currentBookingsCount = (salonBookings || []).length;
+
+            if (currentBookingsCount >= totalStaffCount) {
+                return res.status(400).json({ error: 'This time slot is at full capacity. Please choose another time.' });
             }
         }
 
         // 3. Generate Unique Booking ID
         const booking_number = `BTX-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
-        // 4. Insert Booking with 'pending' status
-        const { data: booking, error: bookingError } = await supabase
+        // 4. Insert Booking with 'pending' status - use supabaseAdmin to bypass RLS for Guest bookings
+        const { data: booking, error: bookingError } = await supabaseAdmin
             .from('bookings')
             .insert([{
                 booking_number,
@@ -88,8 +132,13 @@ export const createBooking = async (req, res) => {
                 start_time,
                 end_time,
                 total_price,
+                points_used,
                 payment_method,
+                payment_type: payment_type || 'full',
                 notes,
+                guest_name: guest_name || null,
+                guest_email: guest_email || null,
+                guest_phone: guest_phone || null,
                 status: 'pending' // Insert as pending to satisfy db constraints
             }])
             .select()
@@ -105,19 +154,53 @@ export const createBooking = async (req, res) => {
             duration_minutes: s.duration_minutes
         }));
 
-        const { error: bsError } = await supabase
+        const { error: bsError } = await supabaseAdmin
             .from('booking_services')
             .insert(bookingServicesData);
 
         if (bsError) throw bsError;
 
+        // 5.5 Insert Product Orders if any
+        if (products && products.length > 0) {
+            const { data: order, error: orderError } = await supabaseAdmin
+                .from('product_orders')
+                .insert([{
+                    customer_id,
+                    salon_id,
+                    total_amount: product_total,
+                    status: 'pending',
+                    payment_method
+                }])
+                .select()
+                .single();
+
+            if (orderError) throw orderError;
+
+            const orderItemsData = products.map(p => ({
+                order_id: order.id,
+                product_id: p.product_id,
+                quantity: p.quantity,
+                price_at_purchase: p.price
+            }));
+
+            const { error: itemsError } = await supabaseAdmin
+                .from('order_items')
+                .insert(orderItemsData);
+
+            if (itemsError) throw itemsError;
+            
+            // Note: In a full app, you might want to decrement stock_quantity here
+        }
+
+        const amount_to_pay = payment_type === 'advance' ? Math.ceil(total_price / 2) : total_price;
+
         // 6. Create initial payment record
-        await supabase
+        await supabaseAdmin
             .from('payments')
             .insert([{
                 booking_id: booking.id,
                 customer_id,
-                amount: total_price,
+                amount: amount_to_pay,
                 payment_method: payment_method || 'cash',
                 status: 'pending',
                 transaction_id: `TRX-${booking_number.split('-')[1]}`
@@ -139,26 +222,75 @@ export const createBooking = async (req, res) => {
 // Get User Bookings
 export const getUserBookings = async (req, res) => {
     try {
-        const { data, error } = await supabase
+        const userId = req.user.id;
+        const userEmail = req.user.email;
+
+        const selectQuery = `
+            *,
+            salons (name, address, city, image_url),
+            booking_services (
+                service_id,
+                services (name, price)
+            ),
+            reviews (id)
+        `;
+
+        // Use supabaseAdmin to bypass RLS — user is authenticated via requireAuth middleware
+        const { data: ownedBookings, error: ownedError } = await supabaseAdmin
             .from('bookings')
-            .select(`
-                *,
-                salons (name, address, city, image_url),
-                booking_services (
-                    service_id,
-                    services (name, price)
-                )
-            `)
-            .eq('customer_id', req.user.id)
+            .select(selectQuery)
+            .eq('customer_id', userId)
             .order('booking_date', { ascending: false });
 
-        if (error) throw error;
+        if (ownedError) throw ownedError;
 
-        // Fetch staff names separately to avoid double-join schema cache issues
-        const staffIds = [...new Set(data.map(b => b.staff_id).filter(Boolean))];
+        // Also fetch guest bookings matched by email (OTP bookings before account linking)
+        let guestBookings = [];
+        if (userEmail) {
+            const { data: guestData } = await supabaseAdmin
+                .from('bookings')
+                .select(selectQuery)
+                .is('customer_id', null)
+                .eq('guest_email', userEmail)
+                .order('booking_date', { ascending: false });
+            guestBookings = guestData || [];
+        }
+
+        // Merge and de-duplicate by id
+        const seen = new Set();
+        const merged = [...(ownedBookings || []), ...guestBookings].filter(b => {
+            if (seen.has(b.id)) return false;
+            seen.add(b.id);
+            return true;
+        });
+
+        // Auto-confirm any pending QR bookings (user already scanned and paid)
+        const pendingQrIds = merged
+            .filter(b => b.status === 'pending' && b.payment_method === 'qr')
+            .map(b => b.id);
+
+        if (pendingQrIds.length > 0) {
+            await supabaseAdmin
+                .from('bookings')
+                .update({ status: 'confirmed', updated_at: new Date() })
+                .in('id', pendingQrIds);
+
+            // Update in-memory too so response is consistent
+            merged.forEach(b => {
+                if (pendingQrIds.includes(b.id)) {
+                    b.status = 'confirmed';
+                }
+            });
+        }
+
+        // Sort merged list by booking_date descending
+        merged.sort((a, b) => new Date(b.booking_date) - new Date(a.booking_date));
+
+        // Fetch staff names separately
+        const staffIds = [...new Set(merged.map(b => b.staff_id).filter(Boolean))];
         let staffMap = {};
         if (staffIds.length > 0) {
-            const { data: staffProfiles } = await supabase
+            const { data: staffProfiles } = await supabaseAdmin
                 .from('profiles')
                 .select('id, full_name')
                 .in('id', staffIds);
@@ -167,10 +299,16 @@ export const getUserBookings = async (req, res) => {
             }
         }
 
-        const enriched = data.map(b => ({
-            ...b,
-            staff_name: b.staff_id ? staffMap[b.staff_id] || null : null
-        }));
+        const enriched = merged.map(b => {
+            const has_review = Array.isArray(b.reviews) ? b.reviews.length > 0 : !!b.reviews;
+            const res = {
+                ...b,
+                staff_name: b.staff_id ? staffMap[b.staff_id] || null : null,
+                has_review
+            };
+            delete res.reviews;
+            return res;
+        });
 
         res.status(200).json({ bookings: enriched });
     } catch (error) {
@@ -226,7 +364,15 @@ export const getAllBookings = async (req, res) => {
 // Get Staff Bookings
 export const getStaffBookings = async (req, res) => {
     try {
-        const { data, error } = await supabase
+        // 1. Fetch user's profile to check for assigned shop (Owner/Manager check)
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, role, assigned_shop')
+            .eq('id', req.user.id)
+            .single();
+
+        // 2. Determine visibility scope: Salon-wide if assigned_shop exists, otherwise staff-specific
+        let query = supabase
             .from('bookings')
             .select(`
                 *,
@@ -234,19 +380,30 @@ export const getStaffBookings = async (req, res) => {
                 booking_services (
                     services (name)
                 )
-            `)
-            .eq('staff_id', req.user.id)
-            .order('booking_date', { ascending: true });
+            `);
+        
+        if (profile?.assigned_shop) {
+            query = query.eq('salon_id', profile.assigned_shop);
+        } else {
+            query = query.eq('staff_id', req.user.id);
+        }
+
+        const { data, error } = await query.order('booking_date', { ascending: true });
 
         if (error) throw error;
 
-        const customerIds = [...new Set(data.map(b => b.customer_id).filter(Boolean))];
+        // Collect unique customer/staff IDs then fetch their profiles
+        const profileIds = [...new Set([
+            ...data.map(b => b.customer_id).filter(Boolean),
+            ...data.map(b => b.staff_id).filter(Boolean)
+        ])];
+
         let profileMap = {};
-        if (customerIds.length > 0) {
+        if (profileIds.length > 0) {
             const { data: profiles } = await supabase
                 .from('profiles')
                 .select('id, full_name, phone_number')
-                .in('id', customerIds);
+                .in('id', profileIds);
             if (profiles) {
                 profiles.forEach(p => { profileMap[p.id] = p; });
             }
@@ -255,6 +412,7 @@ export const getStaffBookings = async (req, res) => {
         const enriched = data.map(b => ({
             ...b,
             customer: profileMap[b.customer_id] || null,
+            staff: profileMap[b.staff_id] ? { full_name: profileMap[b.staff_id].full_name } : null,
         }));
 
         res.status(200).json({ bookings: enriched });

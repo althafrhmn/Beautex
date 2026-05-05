@@ -33,7 +33,7 @@ const slides = [
 const HomeHeroSlider = () => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isAutoPlaying, setIsAutoPlaying] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
+
     const navigate = useNavigate();
 
     const nextSlide = useCallback(() => {
@@ -42,14 +42,6 @@ const HomeHeroSlider = () => {
 
     const prevSlide = () => {
         setCurrentIndex((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
-    };
-
-    const handleSearch = (e) => {
-        e.preventDefault();
-        if (searchQuery.trim()) {
-            navigate(`/explore/${searchQuery.toLowerCase().trim()}`);
-            setSearchQuery('');
-        }
     };
 
     useEffect(() => {
@@ -118,37 +110,7 @@ const HomeHeroSlider = () => {
                 </motion.div>
             </AnimatePresence>
 
-            {/* High Fidelity Search Interface */}
-            <div className="absolute inset-0 z-40 flex items-end justify-center pb-20 md:pb-32 px-6">
-                <div className="max-w-7xl mx-auto w-full">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 1.2 }}
-                        className="max-w-xl mx-auto w-full"
-                    >
-                        <form
-                            onSubmit={handleSearch}
-                            className="relative flex items-center bg-[#0A0A0A] border border-white/5 rounded-[2rem] p-3 shadow-2xl hover:border-[#00E6A0]/30 transition-all duration-500"
-                        >
-                            <Search className="w-5 h-5 text-gray-500 ml-5" />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Find your local sanctuary..."
-                                className="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder:text-gray-700 px-5 py-3 text-sm font-bold"
-                            />
-                            <button
-                                type="submit"
-                                className="bg-[#00E6A0] text-[#050505] px-10 py-4 rounded-[1.5rem] text-xs font-black uppercase tracking-widest hover:bg-white transition-all shadow-lg shadow-[#00E6A0]/20"
-                            >
-                                Discover
-                            </button>
-                        </form>
-                    </motion.div>
-                </div>
-            </div>
+
 
             {/* Navigation Elements */}
             <div className="absolute bottom-12 right-12 z-50 flex items-center gap-6">

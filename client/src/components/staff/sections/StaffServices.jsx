@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Scissors } from 'lucide-react';
 import api from '../../../utils/api';
 
-const StaffServices = () => {
+const StaffServices = ({ searchTerm }) => {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -31,7 +31,11 @@ const StaffServices = () => {
                 <p className="text-gray-500 text-center py-12">Loading services...</p>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {services.map((service) => (
+                    {services.filter(s => 
+                        !searchTerm || 
+                        s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        s.category?.toLowerCase().includes(searchTerm.toLowerCase())
+                    ).map((service) => (
                         <div key={service.id} className="bg-[#141414] border border-[#2A2A2A] rounded-xl overflow-hidden hover:border-[#3A3A3A] transition-colors">
                             {service.image_url && (
                                 <img src={service.image_url} alt={service.name} className="w-full h-36 object-cover" />

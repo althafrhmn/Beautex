@@ -8,9 +8,14 @@ const BookingPage = ({ view = 'book' }) => {
     const { role } = useSelector((state) => state.auth);
 
     const renderContent = () => {
-        if (role === 'admin') return <div className="pt-24"><BookingManagerAdmin /></div>;
+        // If we want to BOOK, show the BookingFlow regardless of the user's management role.
+        // This ensures admins testing the site see what a customer sees.
+        if (view === 'book') return <BookingFlow />;
 
-        return view === 'book' ? <BookingFlow /> : <CustomerBookings />;
+        // Otherwise, show the role-specific management view
+        if (role === 'admin' || role === 'manager') return <div className="pt-24"><BookingManagerAdmin /></div>;
+
+        return <CustomerBookings />;
     };
 
     return (

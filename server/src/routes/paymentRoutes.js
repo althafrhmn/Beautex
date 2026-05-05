@@ -2,11 +2,21 @@ import express from 'express';
 import { 
     getAllPayments, 
     createPayment, 
-    updatePaymentStatus 
+    updatePaymentStatus,
+    verifyQrPayment,
+    createRazorpayOrder,
+    verifyRazorpayPayment
 } from '../controllers/paymentController.js';
 import { requireAuth, restrictTo } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Razorpay Integration (Open for Guests/Customers)
+router.post('/create-order', createRazorpayOrder);
+router.post('/verify-payment', verifyRazorpayPayment);
+
+// QR Payment Verification (Customer)
+router.post('/verify-qr', verifyQrPayment);
 
 router.use(requireAuth);
 

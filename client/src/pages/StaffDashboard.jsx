@@ -3,6 +3,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { logout, loginSuccess } from '../redux/authSlice';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
+import api from '../utils/api';
 import { Search, Bell } from 'lucide-react';
 
 import StaffSidebar from '../components/staff/StaffSidebar';
@@ -11,25 +12,41 @@ import StaffBookings from '../components/staff/sections/StaffBookings';
 import StaffCustomers from '../components/staff/sections/StaffCustomers';
 import StaffServices from '../components/staff/sections/StaffServices';
 import StaffProfile from '../components/staff/sections/StaffProfile';
+import ProductInventory from '../components/staff/sections/ProductInventory';
+import AnnouncementManager from '../components/staff/sections/AnnouncementManager';
+import ManagementOverview from '../components/manager/sections/ManagementOverview';
+import ManagerInbox from '../components/manager/sections/ManagerInbox';
+import ReportStation from '../components/manager/sections/ReportStation';
+import PinPrompt from '../components/manager/PinPrompt';
 
 const StaffDashboard = () => {
     const { user, role } = useSelector((state) => state.auth);
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isManagementMode, setIsManagementMode] = useState(false);
+    const [showPinPrompt, setShowPinPrompt] = useState(false);
     const [authReady, setAuthReady] = useState(false);
+    const [profile, setProfile] = useState(null);
     const dispatch = useDispatch();
     const navigate = useNavigate();
 
     // Wait for Supabase to restore the session before firing any API calls
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        supabase.auth.getSession().then(async ({ data: { session } }) => {
             if (session?.access_token) {
-                // Keep Redux/localStorage in sync with the live session
                 localStorage.setItem('token', session.access_token);
-                dispatch(loginSuccess({
-                    user: session.user,
-                    token: session.access_token,
-                    role: role || session.user?.user_metadata?.role || 'staff'
-                }));
+                // Fetch full profile (with shop PIN)
+                try {
+                    const res = await api.get('/staff/me/profile');
+                    setProfile(res.data.profile);
+                    dispatch(loginSuccess({
+                        user: { ...session.user, ...res.data.profile },
+                        token: session.access_token,
+                        role: res.data.profile.role
+                    }));
+                } catch (err) {
+                    console.error('Error fetching profile:', err);
+                }
             }
             setAuthReady(true);
         });
@@ -40,14 +57,14 @@ const StaffDashboard = () => {
         dispatch(logout());
         navigate('/login');
     };
-
-    // Only staff can access
-    if (role !== 'staff') {
+    
+    // Allow both 'staff' and 'manager' roles
+    if (role !== 'staff' && role !== 'manager' && role !== 'admin') {
         return (
             <div className="min-h-screen bg-[#0F1115] flex items-center justify-center p-20 text-center font-sans">
                 <div className="max-w-md w-full bg-[#141414] border border-[#2A2A2A] rounded-2xl p-8">
                     <h1 className="text-white text-2xl font-bold mb-2">Restricted Area</h1>
-                    <p className="text-gray-400 text-sm mb-8">You do not have staff privileges to access this portal.</p>
+                    <p className="text-gray-400 text-sm mb-8">You do not have administrative or staff privileges to access this portal.</p>
                     <button onClick={() => navigate('/')} className="w-full px-6 py-3 bg-[#00E6A0] hover:bg-[#00C88B] text-[#141414] font-semibold rounded-xl transition-colors">
                         Return to Site
                     </button>
@@ -57,13 +74,27 @@ const StaffDashboard = () => {
     }
 
     const renderContent = () => {
+        const props = { searchTerm, setActiveTab };
+        if (isManagementMode) {
+            switch (activeTab) {
+                case 'analytics': return <ManagementOverview {...props} />;
+                case 'inbox': return <ManagerInbox {...props} />;
+                case 'reports': return <ReportStation {...props} />;
+                case 'inventory': return <ProductInventory {...props} />;
+                case 'announcements': return <AnnouncementManager {...props} />;
+                default: return <ManagementOverview {...props} />;
+            }
+        }
+
         switch (activeTab) {
-            case 'dashboard': return <StaffDashboardOverview />;
-            case 'bookings': return <StaffBookings />;
-            case 'customers': return <StaffCustomers />;
-            case 'services': return <StaffServices />;
-            case 'profile': return <StaffProfile />;
-            default: return <StaffDashboardOverview />;
+            case 'dashboard': return <StaffDashboardOverview {...props} />;
+            case 'bookings': return <StaffBookings {...props} />;
+            case 'customers': return <StaffCustomers {...props} />;
+            case 'services': return <StaffServices {...props} />;
+            case 'inventory': return <ProductInventory {...props} />;
+            case 'profile': return <StaffProfile {...props} />;
+            case 'announcements': return <AnnouncementManager {...props} />;
+            default: return <StaffDashboardOverview {...props} />;
         }
     };
 
@@ -72,27 +103,67 @@ const StaffDashboard = () => {
         bookings: 'My Bookings',
         customers: 'Assigned Customers',
         services: 'Services',
-        profile: 'My Profile'
+        inventory: 'Store Inventory',
+        profile: 'My Profile',
+        announcements: 'Broadcast Station'
+    };
+
+    const isOwner = role === 'manager' || (role === 'staff' && user?.assigned_shop) || role === 'admin';
+
+    const handlePinVerify = (pin) => {
+        // Priority: Shop-level PIN (set in Add Shop) -> Profile PIN -> Default
+        const masterPin = profile?.salon?.manager_pin || profile?.manager_pin || '1234';
+        
+        if (pin === masterPin) {
+            setIsManagementMode(true);
+            setActiveTab('analytics');
+            setShowPinPrompt(false);
+            return true;
+        }
+        return false;
     };
 
     return (
         <div className="min-h-screen bg-[#0F1115] flex text-white font-sans selection:bg-[#00E6A0] selection:text-[#141414]">
-            <StaffSidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
+            {showPinPrompt && (
+                <PinPrompt 
+                    onVerify={handlePinVerify} 
+                    onCancel={() => setShowPinPrompt(false)} 
+                />
+            )}
+            <StaffSidebar 
+                activeTab={activeTab} 
+                setActiveTab={setActiveTab} 
+                onLogout={handleLogout} 
+                isManagementMode={isManagementMode}
+                setIsManagementMode={setIsManagementMode}
+                setShowPinPrompt={setShowPinPrompt}
+                role={role}
+            />
 
-            <main className="flex-1 flex flex-col h-screen overflow-y-auto relative">
+            <main className="flex-1 flex flex-col h-screen overflow-y-auto relative custom-scrollbar">
                 {/* Header */}
                 <header className="sticky top-0 z-[90] bg-[#0F1115]/90 backdrop-blur-xl border-b border-[#2A2A2A] px-10 py-6 flex justify-between items-center">
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-white capitalize">
-                            Staff <span className="text-[#00E6A0] inline-block pb-1 border-b-2 border-[#00E6A0]">{tabLabels[activeTab] || activeTab}</span>
+                        <h1 className="text-2xl font-black tracking-tight text-white capitalize">
+                            {isManagementMode ? (
+                                <>Executive <span className="text-[#00D1FF] border-b-2 border-[#00D1FF] pb-1">{activeTab}</span></>
+                            ) : (
+                                <>Staff <span className="text-[#00E6A0] border-b-2 border-[#00E6A0] pb-1">{tabLabels[activeTab] || activeTab}</span></>
+                            )}
                         </h1>
                     </div>
 
                     <div className="flex items-center gap-6">
                         <div className="relative group hidden lg:block">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-[#00E6A0] transition-colors" size={16} />
-                            <input type="text" placeholder="Search here..."
-                                className="bg-[#141414] border border-[#2A2A2A] rounded-xl pl-10 pr-6 py-2.5 text-sm font-medium focus:outline-none focus:border-[#00E6A0]/50 text-white min-w-[260px] transition-all" />
+                            <Search className={`absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 transition-colors ${isManagementMode ? 'group-focus-within:text-[#00D1FF]' : 'group-focus-within:text-[#00E6A0]'}`} size={16} />
+                            <input 
+                                type="text" 
+                                placeholder={`Search ${isManagementMode ? 'Executive records' : tabLabels[activeTab]}...`}
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className={`bg-[#141414] border border-[#2A2A2A] rounded-xl pl-10 pr-6 py-2.5 text-sm font-medium focus:outline-none text-white min-w-[280px] transition-all ${isManagementMode ? 'focus:border-[#00D1FF]/50' : 'focus:border-[#00E6A0]/50'}`} 
+                            />
                         </div>
 
                         <div className="flex items-center gap-5 border-l border-[#2A2A2A] pl-6">
@@ -109,7 +180,7 @@ const StaffDashboard = () => {
                                     {user?.user_metadata?.avatar_url ? (
                                         <img src={user.user_metadata.avatar_url} className="w-full h-full object-cover" alt="" />
                                     ) : (
-                                        <span className="text-[#00E6A0] font-bold text-sm">{user?.user_metadata?.full_name?.[0] || 'S'}</span>
+                                        <span className={`${isManagementMode ? 'text-[#00D1FF]' : 'text-[#00E6A0]'} font-bold text-sm`}>{user?.user_metadata?.full_name?.[0] || 'S'}</span>
                                     )}
                                 </div>
                             </div>

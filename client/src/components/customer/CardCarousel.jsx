@@ -8,60 +8,15 @@ const CardCarousel = ({ services = [] }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
-    const defaultSlides = [
-        {
-            id: 'h1',
-            title: "Hair & Artistry",
-            desc: "Bespoke cuts and vibrant colors crafted by our master stylists.",
-            image: "https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=1200",
-            category: "Hair"
-        },
-        {
-            id: 'm1',
-            title: "Elite Grooming",
-            desc: "Precision engineering for the modern man. Shaves, sculpts, and style.",
-            image: "https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&q=80&w=1200",
-            category: "Grooming"
-        },
-        {
-            id: 's1',
-            title: "Dermal Rituals",
-            desc: "Transformative facials and clinical skin treatments in a zen sanctuary.",
-            image: "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&q=80&w=1200",
-            category: "Skin"
-        },
-        {
-            id: 'b1',
-            title: "Bridal Sanctuary",
-            desc: "The royal transformation for your most significant moments.",
-            image: "https://images.unsplash.com/photo-1594465919760-441fe5908ab0?auto=format&fit=crop&q=80&w=1200",
-            category: "Bridal"
-        },
-        {
-            id: 'w1',
-            title: "Aura Wellness",
-            desc: "Holistic body therapy and deep tissue alchemy to restore balance.",
-            image: "https://images.unsplash.com/photo-1544161515-4ae6ce6db87e?auto=format&fit=crop&q=80&w=1200",
-            category: "Wellness"
-        },
-        {
-            id: 'n1',
-            title: "Architectural Nails",
-            desc: "Geometric precision and artistic expression for your hands.",
-            image: "https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&q=80&w=1200",
-            category: "Nails"
-        }
-    ];
+    const slides = services.slice(0, 5).map(s => ({
+        id: s.id,
+        title: s.name,
+        desc: s.description,
+        image: s.image_url || "https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=1200",
+        category: s.category
+    }));
 
-    const slides = services.length > 0 
-        ? services.slice(0, 5).map(s => ({
-            id: s.id,
-            title: s.name,
-            desc: s.description,
-            image: s.image_url || "https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=1200",
-            category: s.category
-        }))
-        : defaultSlides;
+    if (slides.length === 0) return null;
 
     useEffect(() => {
         let interval;
@@ -95,12 +50,7 @@ const CardCarousel = ({ services = [] }) => {
             onMouseEnter={() => setIsAutoPlaying(false)}
             onMouseLeave={() => setIsAutoPlaying(true)}
         >
-            <div className="max-w-[1400px] mx-auto px-6 mb-16 text-center">
-                <p className="text-[#00E6A0] font-black text-[10px] uppercase tracking-[0.4em] mb-6">Signature Experiences</p>
-                <h2 className="text-5xl md:text-7xl font-black tracking-tighter leading-none text-white">
-                    Our Specialized <span className="text-gray-500">Treatments</span>
-                </h2>
-            </div>
+
 
             <div className="relative h-[600px] w-full flex items-center justify-center pt-10">
                 <div className="relative w-full max-w-7xl h-full flex items-center justify-center">

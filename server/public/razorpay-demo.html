@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Razorpay Payment Verification - College Project</title>
+    <!-- Use Tailwind for quick styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Include Razorpay Checkout Script -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+
+<body class="bg-[#050505] text-white font-sans min-h-screen flex items-center justify-center p-6">
+
+    <div class="max-w-md w-full bg-[#141414] border border-white/10 rounded-[2.5rem] p-10 shadow-2xl text-center">
+        <div class="mb-8">
+            <div
+                class="w-16 h-16 bg-blue-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-400" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+            </div>
+            <h1 class="text-3xl font-black tracking-tighter uppercase italic">Razorpay <span
+                    class="text-blue-500">Gateway</span></h1>
+            <p class="text-[10px] font-black text-gray-500 uppercase tracking-[0.3rem] mt-2">College Project Prototype
+            </p>
+        </div>
+
+        <div class="space-y-6">
+            <div class="p-6 bg-white/5 border border-white/5 rounded-2xl">
+                <p class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Payment Amount</p>
+                <h2 class="text-4xl font-black">₹10.00</h2>
+            </div>
+
+            <button id="pay-button"
+                class="w-full py-5 bg-blue-600 hover:bg-white text-white hover:text-black rounded-[2rem] text-xs font-black uppercase tracking-[0.3rem] transition-all shadow-xl shadow-blue-500/20 active:scale-95">
+                Pay Now
+            </button>
+        </div>
+
+        <div id="status-box" class="mt-8 hidden animate-in fade-in slide-in-from-top-2">
+            <div id="status-content"
+                class="p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest italic border">
+                <!-- Status message goes here -->
+            </div>
+        </div>
+
+        <footer class="mt-10 text-[8px] text-gray-700 font-black uppercase tracking-[0.2rem]">
+            Built with Node.js, Express & Razorpay
+        </footer>
+    </div>
+
+    <script>
+        const payButton = document.getElementById('pay-button');
+        const statusBox = document.getElementById('status-box');
+        const statusContent = document.getElementById('status-content');
+
+        const showStatus = (msg, success = true) => {
+            statusBox.classList.remove('hidden');
+            statusContent.innerText = msg;
+            if (success) {
+                statusContent.className = "p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest italic border border-green-500/30 bg-green-500/10 text-green-500";
+            } else {
+                statusContent.className = "p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest italic border border-red-500/30 bg-red-500/10 text-red-500";
+            }
+        };
+
+        payButton.onclick = async () => {
+            try {
+                payButton.disabled = true;
+                payButton.innerText = "Initializing...";
+
+                // Step 1: Create Order in Backend
+                const response = await fetch('/api/razorpay/create-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ amount: 10 }) // Amount in INR
+                });
+
+                const order = await response.json();
+
+                if (!order.id) throw new Error("Order creation failed");
+
+                // Step 2: Open Razorpay Checkout
+                const options = {
+                    key: "rzp_test_SZH98jVuqbMh3U", // IMPORTANT: Add your key here for testing
+                    amount: order.amount,
+                    currency: order.currency,
+                    name: "Beautex College Project",
+                    description: "Payment Verification Demo",
+                    order_id: order.id,
+                    handler: async function (response) {
+                        // This code runs when payment is successful in the popup
+
+                        // Step 3: Verify Signature in Backend
+                        const verifyResponse = await fetch('/api/razorpay/verify-payment', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature
+                            })
+                        });
+
+                        const result = await verifyResponse.json();
+
+                        if (result.signatureIsValid) {
+                            showStatus("SUCCESS: Transaction Verified by Backend");
+                        } else {
+                            showStatus("FAILED: Signature Mismatch", false);
+                        }
+                    },
+                    prefill: {
+                        name: "College Student",
+                        email: "student@example.com",
+                        contact: "9999999999"
+                    },
+                    theme: { color: "#2563eb" }
+                };
+
+                const rzp = new Razorpay(options);
+                rzp.open();
+
+                rzp.on('payment.failed', function (response) {
+                    showStatus("FAILED: " + response.error.description, false);
+                });
+
+            } catch (error) {
+                console.error(error);
+                showStatus("ERROR: " + error.message, false);
+            } finally {
+                payButton.disabled = false;
+                payButton.innerText = "Pay Now";
+            }
+        };
+    </script>
+</body>
+
+</html>

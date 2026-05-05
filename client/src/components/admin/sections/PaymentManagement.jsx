@@ -52,16 +52,16 @@ const PaymentManagement = () => {
         <div className="space-y-6 animate-in fade-in duration-500 font-sans">
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-white">Payment Management</h2>
-                    <p className="text-gray-400 text-sm mt-1">Track salon transactions and revenues</p>
+                    <h2 className="text-4xl font-black tracking-tighter text-white uppercase">Commerce <span className="text-[#00E6A0]">&</span> Contracts</h2>
+                    <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Manage platform revenue from shop renewals and ad campaigns</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-6">
-                    <p className="text-sm text-gray-400 font-medium mb-2">Total Revenue (This Month)</p>
+                <div className="bg-[#111] border border-white/5 rounded-2xl p-6">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Contract Revenue (Monthly)</p>
                     <div className="flex items-end justify-between">
-                        <h3 className="text-2xl font-bold tracking-tight text-white">₹{stats.totalMonthly.toLocaleString()}</h3>
+                        <h3 className="text-3xl font-black tracking-tighter text-white">₹{stats.totalMonthly.toLocaleString()}</h3>
                         <span className="flex items-center text-[#00E6A0] text-sm font-semibold">
                             <ArrowUpRight size={16} className="mr-1" />
                             Live
@@ -106,14 +106,14 @@ const PaymentManagement = () => {
 
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                        <thead className="text-xs uppercase bg-[#1A1A1A] text-gray-400">
+                        <thead className="text-[10px] uppercase bg-[#1A1A1A] text-gray-500 font-black tracking-widest">
                             <tr>
-                                <th className="px-6 py-4 font-semibold rounded-tl-lg">Transaction ID</th>
-                                <th className="px-6 py-4 font-semibold">Customer / Booking</th>
-                                <th className="px-6 py-4 font-semibold">Method</th>
-                                <th className="px-6 py-4 font-semibold">Amount</th>
-                                <th className="px-6 py-4 font-semibold">Date</th>
-                                <th className="px-6 py-4 font-semibold text-right rounded-tr-lg">Actions</th>
+                                <th className="px-6 py-5 rounded-tl-2xl">Invoice ID</th>
+                                <th className="px-6 py-5">Partner / Shop Identity</th>
+                                <th className="px-6 py-5">Revenue Source</th>
+                                <th className="px-6 py-5">Amount</th>
+                                <th className="px-6 py-5">Renewal Date</th>
+                                <th className="px-6 py-5 text-right rounded-tr-2xl">Status</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-[#2A2A2A]">
@@ -126,10 +126,12 @@ const PaymentManagement = () => {
                                     <tr key={payment.id} className="hover:bg-[#1A1A1A]/50 transition-colors">
                                         <td className="px-6 py-4 font-mono text-gray-300">{payment.transaction_id}</td>
                                         <td className="px-6 py-4">
-                                            <p className="font-medium text-white">{payment.customer?.full_name}</p>
-                                            <p className="text-xs text-[#00E6A0]">#{payment.booking?.booking_number}</p>
+                                            <p className="font-bold text-white uppercase tracking-tight">{payment.customer?.full_name}</p>
+                                            <p className="text-[10px] text-[#00E6A0] font-black uppercase">Active Sanctuary</p>
                                         </td>
-                                        <td className="px-6 py-4 text-gray-400 capitalize">{payment.payment_method}</td>
+                                        <td className="px-6 py-4 text-gray-500 text-[10px] font-black uppercase tracking-widest">
+                                            {payment.amount > 5000 ? 'Contract Renewal' : 'App Promotion Ad'}
+                                        </td>
                                         <td className="px-6 py-4 font-semibold text-white">₹{parseFloat(payment.amount).toLocaleString()}</td>
                                         <td className="px-6 py-4 text-gray-400">{new Date(payment.created_at).toLocaleDateString()}</td>
                                         <td className="px-6 py-4 text-right">

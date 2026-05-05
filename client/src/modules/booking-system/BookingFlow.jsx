@@ -5,26 +5,51 @@ import {
     ArrowLeft, ArrowRight, CheckCircle,
     Scissors, Info, ShieldCheck,
     Check, Plus, Phone, CreditCard, Lock, RefreshCw,
-    ChevronRight, User
+    ChevronRight, User, QrCode, X, Award
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import api from '../../utils/api';
 // eslint-disable-next-line no-unused-vars
+import { useDispatch } from 'react-redux';
+import { updateUser } from '../../redux/authSlice';
 import { AnimatePresence, motion } from 'framer-motion';
 
 const BookingFlow = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const [step, setStep] = useState(1); // 1: Salon, 2: Services, 3: Date&Time, 4: Personal Details, 5: Payment, 6: Success
+    const dispatch = useDispatch();
 
+    // 1. Initial data extraction to avoid useEffect flicker
+    const getInitialData = () => {
+        let bookingData = location.state;
+        const storedPending = sessionStorage.getItem('pendingBooking');
+        
+        if (!bookingData?.salon && storedPending) {
+            try {
+                bookingData = JSON.parse(storedPending);
+                // Keep it in session until fully consumed or initialized
+            } catch (e) {
+                console.error("Could not parse pending booking", e);
+            }
+        }
+        return bookingData;
+    };
+
+    const initialBookingData = getInitialData();
+    const isPreselected = !!initialBookingData?.salon;
+
+    const [step, setStep] = useState(isPreselected ? 2 : 1); 
+    const [selectedSalon, setSelectedSalon] = useState(initialBookingData?.salon || null);
+    const [selectedServices, setSelectedServices] = useState(initialBookingData?.service ? [initialBookingData?.service] : []);
+    const [selectedProducts, setSelectedProducts] = useState(initialBookingData?.products || []);
+    
+    // 2. Regular state
     const [salons, setSalons] = useState([]);
     const [services, setServices] = useState([]);
     const [shopServices, setShopServices] = useState([]);
     const [staffList, setStaffList] = useState([]);
-
     const [slots, setSlots] = useState([]);
 
-    const [selectedSalon, setSelectedSalon] = useState(null);
-    const [selectedServices, setSelectedServices] = useState([]);
     const [selectedStaff, setSelectedStaff] = useState(null);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedSlot, setSelectedSlot] = useState(null);
@@ -33,29 +58,35 @@ const BookingFlow = () => {
     const [loading, setLoading] = useState(false);
     const [confirmation, setConfirmation] = useState(null);
     const [paymentMethod, setPaymentMethod] = useState('online');
+    const [paymentType, setPaymentType] = useState('full');
     const [showQRModal, setShowQRModal] = useState(false);
+    const [qrBooking, setQrBooking] = useState(null);
     const [userUpiId, setUserUpiId] = useState('');
     const [error, setError] = useState(null);
+    const [usePoints, setUsePoints] = useState(false);
+    
+    // Get user from local storage
+    const storedUserStr = localStorage.getItem('user');
+    const currentUser = storedUserStr ? JSON.parse(storedUserStr) : null;
+    const userPoints = currentUser?.loyalty_points || 0;
 
     // Personal Details step
     const [fullName, setFullName] = useState('');
+    const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [otpSent, setOtpSent] = useState(false);
     const [otpVerified, setOtpVerified] = useState(false);
-    const [dob, setDob] = useState('');
-    const [address, setAddress] = useState('');
     const [aadhar, setAadhar] = useState('');
-    const [captchaInput, setCaptchaInput] = useState('');
-    const [captchaCode] = useState(() => Math.random().toString(36).slice(2, 8).toUpperCase());
+
 
     // Mock data
     const mockSalons = [
-        { id: '1', name: 'Glam Makeovers Kottakkal', city: 'Kottakkal', rating: 4.8, reviews: '1.2K', image_url: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800', address: 'Pallippuram Arcade', phone: '+91 98470 12345', timing: '9:00 AM - 8:00 PM' },
-        { id: '2', name: 'Toni&Guy Essensuals', city: 'Malappuram', rating: 4.9, reviews: '2.5K', image_url: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=800', address: 'Up Hill', phone: '+91 98470 99999', timing: '9:30 AM - 9:00 PM' },
-        { id: '3', name: 'Enchanted Spa & Wellness', city: 'Kochi', rating: 4.7, reviews: '3.1K', image_url: 'https://images.unsplash.com/photo-1544161515-4ae6ce6db87e?auto=format&fit=crop&q=80&w=800', address: 'Marine Drive', phone: '+91 98470 77777', timing: '8:00 AM - 10:00 PM' },
-        { id: '4', name: 'The Royal Grooming Studio', city: 'Tirur', rating: 4.6, reviews: '950', image_url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=800', address: 'Central Plaza', phone: '+91 98470 66666', timing: '10:00 AM - 8:00 PM' },
-        { id: '5', name: 'Aesthetic Elite', city: 'Perintalmanna', rating: 4.9, reviews: '1.8K', image_url: 'https://images.unsplash.com/photo-1600607687940-497f1f6262c0?auto=format&fit=crop&q=80&w=800', address: 'City Centre', phone: '+91 98470 55555', timing: '9:00 AM - 9:00 PM' }
+        { id: '1', name: 'Glam Makeovers Kottakkal', city: 'Kottakkal', rating: 0, reviews: '0', image_url: 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800', address: 'Pallippuram Arcade', phone: '+91 98470 12345', timing: '9:00 AM - 8:00 PM' },
+        { id: '2', name: 'Toni&Guy Essensuals', city: 'Malappuram', rating: 0, reviews: '0', image_url: 'https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=800', address: 'Up Hill', phone: '+91 98470 99999', timing: '9:30 AM - 9:00 PM' },
+        { id: '3', name: 'Enchanted Spa & Wellness', city: 'Kochi', rating: 0, reviews: '0', image_url: 'https://images.unsplash.com/photo-1544161515-4ae6ce6db87e?auto=format&fit=crop&q=80&w=800', address: 'Marine Drive', phone: '+91 98470 77777', timing: '8:00 AM - 10:00 PM' },
+        { id: '4', name: 'The Royal Grooming Studio', city: 'Tirur', rating: 0, reviews: '0', image_url: 'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=800', address: 'Central Plaza', phone: '+91 98470 66666', timing: '10:00 AM - 8:00 PM' },
+        { id: '5', name: 'Aesthetic Elite', city: 'Perintalmanna', rating: 0, reviews: '0', image_url: 'https://images.unsplash.com/photo-1600607687940-497f1f6262c0?auto=format&fit=crop&q=80&w=800', address: 'City Centre', phone: '+91 98470 55555', timing: '9:00 AM - 9:00 PM' }
     ];
 
     const mockServices = [
@@ -77,46 +108,86 @@ const BookingFlow = () => {
 
 
     useEffect(() => {
-        fetchSalons();
-        fetchServices();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        const init = async () => {
+            setLoading(true);
+            try {
+                // Fetch basic lists
+                const [allSalons, allServices] = await Promise.all([
+                    fetchSalons(),
+                    fetchServices()
+                ]);
 
-    useEffect(() => {
-        if (location.state?.salon) {
-            const initialStep = 2;
-            handleSalonSelect(location.state.salon, initialStep);
-
-            // If a service was passed, pre-select it
-            if (location.state.service && services.length > 0) {
-                // Find the dynamic version of the service for this shop
-                const currentShopServices = getShopServices(location.state.salon, services);
-                const found = currentShopServices.find(s => s.original_id === location.state.service.id || s.id === location.state.service.id);
-                if (found) {
-                    setSelectedServices([found]);
+                // If we have a pre-selected salon, initialize its specific services
+                if (selectedSalon) {
+                    try {
+                        const res = await api.get(`/shops/${selectedSalon.id}/services`);
+                        if (res.data.services?.length > 0) {
+                            setShopServices(res.data.services);
+                            
+                            // Map pre-selected services to their shop-specific versions
+                            if (initialBookingData?.service) {
+                                const found = res.data.services.find(s => s.original_id === initialBookingData.service.id || s.id === initialBookingData.service.id);
+                                if (found) setSelectedServices([found]);
+                            }
+                        } else {
+                            const filtered = getShopServices(selectedSalon, allServices || []);
+                            setShopServices(filtered);
+                            
+                            // Map pre-selected services to their shop-specific versions
+                            if (initialBookingData?.service) {
+                                const found = filtered.find(s => s.original_id === initialBookingData.service.id || s.id === initialBookingData.service.id);
+                                if (found) setSelectedServices([found]);
+                            }
+                        }
+                    } catch (err) {
+                        const filtered = getShopServices(selectedSalon, allServices || []);
+                        setShopServices(filtered);
+                        if (initialBookingData?.service) {
+                            const found = filtered.find(s => s.original_id === initialBookingData.service.id || s.id === initialBookingData.service.id);
+                            if (found) setSelectedServices([found]);
+                        }
+                    }
+                    fetchStaff(selectedSalon.id);
                 }
+            } catch (err) {
+                console.error("Initialization error:", err);
+            } finally {
+                setLoading(false);
             }
+        };
+
+        init();
+        
+        // Clean up pending booking once initialized
+        if (sessionStorage.getItem('pendingBooking')) {
+            sessionStorage.removeItem('pendingBooking');
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [location.state, services.length > 0]);
+    }, []);
 
     const fetchSalons = async () => {
         try {
             const res = await api.get('/salons');
-            setSalons(res.data?.salons || []);
+            const data = res.data?.salons || [];
+            setSalons(data);
+            return data;
         } catch (err) { 
             console.error('Fetch salons error:', err);
             setError('Could not load salons from the sanctuary.');
+            return [];
         }
     };
 
     const fetchServices = async () => {
         try {
             const res = await api.get('/services');
-            setServices(res.data?.services || []);
+            const data = res.data?.services || [];
+            setServices(data);
+            return data;
         } catch (err) { 
             console.error('Fetch services error:', err);
             setError('Could not load rituals from the archive.');
+            return [];
         }
     };
 
@@ -126,7 +197,7 @@ const BookingFlow = () => {
         if (!selectedSalon) return;
         setLoading(true);
         try {
-            const duration = selectedServices.reduce((sum, s) => sum + s.duration_minutes, 0);
+            const duration = selectedServices.reduce((sum, s) => sum + (parseInt(s.duration_minutes) || 60), 0);
             const { data } = await api.get('/availability/slots', {
                 params: {
                     salon_id: selectedSalon.id,
@@ -135,24 +206,67 @@ const BookingFlow = () => {
                     duration_minutes: duration || 30
                 }
             });
+            const todayStr = new Date().toISOString().split('T')[0];
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            
+            const filterPastSlots = (slotsArray) => {
+                return slotsArray.map(slot => {
+                    if (date === todayStr) {
+                        const [h, m] = slot.time.split(':').map(Number);
+                        const slotMinutes = h * 60 + m;
+                        // Disable if less than 30 mins away
+                        if (slotMinutes <= currentMinutes + 30) {
+                            return { ...slot, available: false };
+                        }
+                    }
+                    return slot;
+                });
+            };
+
             if (data.slots && data.slots.length > 0) {
-                setSlots(data.slots);
+                setSlots(filterPastSlots(data.slots));
             } else {
                 const generated = [];
                 for (let i = 9; i <= 20; i++) {
-                    generated.push({ time: `${i.toString().padStart(2, '0')}:00`, available: true });
-                    generated.push({ time: `${i.toString().padStart(2, '0')}:30`, available: true });
+                    const time1 = `${i.toString().padStart(2, '0')}:00`;
+                    const time2 = `${i.toString().padStart(2, '0')}:30`;
+                    
+                    // Filter lunch break (12:30-1:30)
+                    if (time1 !== "13:00") generated.push({ time: time1, available: true });
+                    if (time2 !== "12:30") generated.push({ time: time2, available: true });
                 }
-                setSlots(generated);
+                setSlots(filterPastSlots(generated.sort((a,b) => a.time.localeCompare(b.time))));
             }
         } catch (err) {
             console.error('Fetch slots error:', err);
+            const todayStr = new Date().toISOString().split('T')[0];
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            
+            const filterPastSlots = (slotsArray) => {
+                return slotsArray.map(slot => {
+                    if (date === todayStr) {
+                        const [h, m] = slot.time.split(':').map(Number);
+                        const slotMinutes = h * 60 + m;
+                        if (slotMinutes <= currentMinutes + 30) {
+                            return { ...slot, available: false };
+                        }
+                    }
+                    return slot;
+                });
+            };
+
             const generated = [];
             for (let i = 9; i <= 20; i++) {
-                generated.push({ time: `${i.toString().padStart(2, '0')}:00`, available: true });
-                generated.push({ time: `${i.toString().padStart(2, '0')}:30`, available: true });
+                const time1 = `${i.toString().padStart(2, '0')}:00`;
+                const time2 = `${i.toString().padStart(2, '0')}:30`;
+                
+                // Filter lunch break (12:30-1:30)
+                if (time1 !== "13:00") generated.push({ time: time1, available: true });
+                if (time2 !== "12:30") generated.push({ time: time2, available: true });
             }
-            setSlots(generated);
+            setSlots(filterPastSlots(generated.sort((a,b) => a.time.localeCompare(b.time))));
         } finally { setLoading(false); }
     };
 
@@ -253,9 +367,13 @@ const BookingFlow = () => {
         });
     };
 
-    const handleConfirmBooking = async () => {
+    const handleConfirmBooking = async (methodOverride = null) => {
         setLoading(true);
         setError(null);
+        
+        // Use override if provided, otherwise use current state
+        const finalMethod = methodOverride || paymentMethod;
+        
         try {
             const token = localStorage.getItem('token');
             if (!token) {
@@ -263,20 +381,37 @@ const BookingFlow = () => {
                 return;
             }
 
+            // Determine customer ID if logged in
+            let customer_id = null;
+            try {
+                const storedUser = localStorage.getItem('user');
+                if (storedUser) {
+                    customer_id = JSON.parse(storedUser).id;
+                }
+            } catch (e) {}
+
             // 1. Create Initial Pending Booking
             const res = await api.post('/bookings', {
                 salon_id: selectedSalon.id,
                 service_ids: selectedServices.map(s => s.original_id || s.id),
+                products: selectedProducts.map(p => ({ product_id: p.product.id, quantity: p.quantity, price: p.product.price })),
                 staff_id: selectedStaff?.id || null,
                 booking_date: selectedDate,
                 start_time: selectedSlot,
                 notes: bookingNote,
-                payment_method: paymentMethod
+                payment_method: finalMethod,
+                payment_type: paymentType,
+                customer_id,
+                use_points: usePoints, // Pass redemption flag
+                // Guest details
+                guest_name: fullName,
+                guest_email: email,
+                guest_phone: phone
             });
 
             const booking = res.data.booking;
 
-            if (paymentMethod === 'online') {
+            if (finalMethod === 'online') {
                 // Razorpay Flow
                 const isLoaded = await loadRazorpay();
                 if (!isLoaded) {
@@ -284,7 +419,8 @@ const BookingFlow = () => {
                 }
 
                 const orderRes = await api.post('/payments/create-order', {
-                    booking_id: booking.id
+                    booking_id: booking.id,
+                    amount: paymentType === 'advance' ? Math.ceil(booking.total_price / 2) : booking.total_price
                 });
 
                 const { order_id, amount, currency, key_id } = orderRes.data;
@@ -308,6 +444,17 @@ const BookingFlow = () => {
                             });
 
                             setConfirmation(verifyRes.data.booking);
+                            // Optimistically update loyalty points in Redux
+                            const ptsEarned = paymentType === 'full' ? Math.floor(amount / 100) : 0;
+                            const storedUser = localStorage.getItem('user');
+                            if (storedUser) {
+                                try {
+                                    const pUser = JSON.parse(storedUser);
+                                    const currentPts = pUser.loyalty_points || 0;
+                                    const newPts = Math.max(0, currentPts - discountAmount) + ptsEarned;
+                                    dispatch(updateUser({ loyalty_points: newPts }));
+                                } catch(e){}
+                            }
                             setStep(6);
                         } catch {
                             setError('Payment verification failed. Please contact support.');
@@ -316,12 +463,17 @@ const BookingFlow = () => {
                         }
                     },
                     prefill: {
-                        name: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).full_name : "",
-                        email: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).email : "",
-                        contact: ""
+                        name: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).full_name : (fullName || ""),
+                        email: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')).email : (email || ""),
+                        contact: phone || ""
                     },
                     theme: {
                         color: "#00E6A0"
+                    },
+                    modal: {
+                        ondismiss: function() {
+                            setLoading(false);
+                        }
                     }
                 };
 
@@ -330,9 +482,10 @@ const BookingFlow = () => {
                     setError(response.error.description);
                 });
                 rzp.open();
-            } else {
-                // QR Code Flow
-                setConfirmation(booking);
+
+            } else if (finalMethod === 'qr') {
+                // UPI QR Code Flow — show custom QR modal
+                setQrBooking(booking);
                 setShowQRModal(true);
             }
 
@@ -343,14 +496,21 @@ const BookingFlow = () => {
         }
     };
 
-    const totalPrice = selectedServices.reduce((sum, s) => sum + parseFloat(s.price), 0);
+    const servicesPrice = selectedServices.reduce((sum, s) => sum + parseFloat(s.price), 0);
+    const productsPrice = selectedProducts.reduce((sum, p) => sum + (parseFloat(p.product.price) * p.quantity), 0);
+    const totalPrice = servicesPrice + productsPrice;
+    
+    const maxDiscountAllowed = paymentType === 'full' ? Math.floor(servicesPrice * 0.20) : 0;
+    const discountAmount = (usePoints && paymentType === 'full') ? Math.min(userPoints, maxDiscountAllowed) : 0;
+    const finalAmount = totalPrice - discountAmount;
+    const payableAmount = paymentType === 'advance' ? Math.ceil(finalAmount / 2) : finalAmount;
 
 
     // Calendar generation
     const getDays = () => {
         const days = [];
         const today = new Date();
-        for (let i = 0; i < 14; i++) {
+        for (let i = 0; i < 7; i++) {
             const d = new Date();
             d.setDate(today.getDate() + i);
             days.push({
@@ -364,7 +524,7 @@ const BookingFlow = () => {
     };
     const days = getDays();
 
-    if (step === 6 && confirmation) {
+    if ((step === 6 || step === 7) && confirmation) {
         return (
             <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6 text-center">
                 <div className="w-24 h-24 bg-[#00E6A0] rounded-full flex items-center justify-center mb-8 shadow-lg">
@@ -381,6 +541,9 @@ const BookingFlow = () => {
                         <div className="text-right">
                             <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-1">Total Paid</p>
                             <p className="font-bold text-[#00E6A0]">₹{totalPrice}</p>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-400 mt-1 flex items-center justify-end gap-1">
+                                <Award size={10} /> +{Math.floor(totalPrice / 100)} Points
+                            </p>
                         </div>
                     </div>
                     <div className="flex flex-col gap-4 text-left border-t border-white/5 pt-6">
@@ -420,7 +583,18 @@ const BookingFlow = () => {
             {/* Header */}
             <div className="bg-[#0A0A0A] border-b border-white/5 sticky top-0 z-50">
                 <div className="max-w-2xl mx-auto px-6 h-20 flex items-center justify-between">
-                    <button onClick={() => step > 1 ? setStep(step - 1) : navigate(-1)} className="p-2 -ml-2 hover:bg-white/5 rounded-xl transition-colors">
+                    <button 
+                        onClick={() => {
+                            if (step === 2 && isPreselected) {
+                                navigate(-1);
+                            } else if (step > 1) {
+                                setStep(step - 1);
+                            } else {
+                                navigate(-1);
+                            }
+                        }} 
+                        className="p-2 -ml-2 hover:bg-white/5 rounded-xl transition-colors"
+                    >
                         <ArrowLeft size={24} />
                     </button>
                     <h1 className="text-xl font-black tracking-tight">
@@ -680,105 +854,95 @@ const BookingFlow = () => {
                                 />
                             </div>
 
-                            {/* Phone + OTP */}
+                            {/* Email + OTP */}
                             <div className="bg-[#0A0A0A] p-6 rounded-3xl border border-white/5 space-y-4">
-                                <label className="text-[10px] text-[#00E6A0] font-black uppercase tracking-widest block">Phone Number * (OTP Verification)</label>
+                                <label className="text-[10px] text-[#00E6A0] font-black uppercase tracking-widest block">Email Address * (OTP Verification)</label>
                                 <div className="flex gap-3">
                                     <input
-                                        type="tel"
-                                        placeholder="+91 XXXXXXXXXX"
-                                        value={phone}
-                                        onChange={e => setPhone(e.target.value)}
+                                        type="email"
+                                        placeholder="your@email.com"
+                                        value={email}
+                                        onChange={e => setEmail(e.target.value)}
                                         disabled={otpVerified}
                                         className="flex-1 bg-transparent text-white text-base py-2 border-b border-white/10 focus:outline-none focus:border-[#00E6A0] transition-colors placeholder:text-gray-600 disabled:opacity-50"
                                     />
                                     {!otpVerified && (
                                         <button
-                                            onClick={() => { if (phone.length >= 10) setOtpSent(true); }}
-                                            className="text-[10px] font-black uppercase tracking-widest text-[#00E6A0] border border-[#00E6A0]/30 px-4 py-2 rounded-xl hover:bg-[#00E6A0] hover:text-black transition-all whitespace-nowrap"
+                                            onClick={async () => { 
+                                                if (email.includes('@')) {
+                                                    setLoading(true);
+                                                    try {
+                                                        await api.post('/auth/guest-otp', { email });
+                                                        setOtpSent(true); 
+                                                        setError(null);
+                                                    } catch (err) {
+                                                        setError('Failed to send OTP. Try again.');
+                                                    } finally {
+                                                        setLoading(false);
+                                                    }
+                                                }
+                                            }}
+                                            disabled={loading}
+                                            className="text-[10px] font-black uppercase tracking-widest text-[#00E6A0] border border-[#00E6A0]/30 px-4 py-2 rounded-xl hover:bg-[#00E6A0] hover:text-black transition-all whitespace-nowrap disabled:opacity-50"
                                         >
-                                            {otpSent ? 'Resend' : 'Send OTP'}
+                                            {loading ? 'Sending...' : otpSent ? 'Resend' : 'Send Code'}
                                         </button>
                                     )}
                                     {otpVerified && (
-                                        <span className="text-[#00E6A0] text-xs font-black flex items-center gap-1"><CheckCircle size={14}/> Verified</span>
+                                        <span className="text-[#00E6A0] text-xs font-black flex items-center gap-1"><CheckCircle size={14}/> Identity Locked</span>
                                     )}
                                 </div>
                                 {otpSent && !otpVerified && (
                                     <div className="flex gap-3 mt-2">
                                         <input
                                             type="text"
-                                            placeholder="Enter 6-digit OTP"
+                                            placeholder="6-digit Ritz Code"
                                             value={otp}
                                             onChange={e => setOtp(e.target.value)}
                                             maxLength={6}
                                             className="flex-1 bg-transparent text-white text-base py-2 border-b border-white/10 focus:outline-none focus:border-[#00E6A0] transition-colors placeholder:text-gray-600 tracking-widest"
                                         />
                                         <button
-                                            onClick={() => { if (otp.length === 6) setOtpVerified(true); }}
-                                            className="text-[10px] font-black uppercase tracking-widest text-black bg-[#00E6A0] px-4 py-2 rounded-xl hover:bg-white transition-all"
+                                            onClick={async () => { 
+                                                if (otp.length === 6) {
+                                                    setLoading(true);
+                                                    try {
+                                                        await api.post('/auth/verify-guest-otp', { email, code: otp });
+                                                        setOtpVerified(true);
+                                                        setError(null);
+                                                    } catch (err) {
+                                                        setError('Invalid code. Please check your email.');
+                                                    } finally {
+                                                        setLoading(false);
+                                                    }
+                                                }
+                                            }}
+                                            disabled={loading}
+                                            className="text-[10px] font-black uppercase tracking-widest text-black bg-[#00E6A0] px-4 py-2 rounded-xl hover:bg-white transition-all disabled:opacity-50"
                                         >
-                                            Verify
+                                            {loading ? '...' : 'Verify'}
                                         </button>
                                     </div>
                                 )}
-                                {otpSent && !otpVerified && <p className="text-[10px] text-gray-500">📩 OTP sent to {phone}. (Demo: any 6 digits)</p>}
+                                {otpSent && !otpVerified && <p className="text-[10px] text-gray-500">📩 Code sent to {email}. Check your inbox.</p>}
                             </div>
 
-                            {/* Date of Birth */}
+                            {/* Optional Phone */}
                             <div className="bg-[#0A0A0A] p-6 rounded-3xl border border-white/5 space-y-1">
-                                <label className="text-[10px] text-[#00E6A0] font-black uppercase tracking-widest">Date of Birth *</label>
+                                <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Phone Number (Optional)</label>
                                 <input
-                                    type="date"
-                                    value={dob}
-                                    onChange={e => setDob(e.target.value)}
-                                    className="w-full bg-transparent text-white text-base py-2 border-b border-white/10 focus:outline-none focus:border-[#00E6A0] transition-colors"
+                                    type="tel"
+                                    placeholder="Enter 10-digit number"
+                                    value={phone}
+                                    maxLength={10}
+                                    onChange={e => {
+                                        const val = e.target.value.replace(/\D/g, '');
+                                        if (val.length <= 10) setPhone(val);
+                                    }}
+                                    className="w-full bg-transparent text-white text-base py-2 border-b border-white/10 focus:outline-none focus:border-[#00E6A0] transition-colors placeholder:text-gray-600"
                                 />
                             </div>
 
-                            {/* Address */}
-                            <div className="bg-[#0A0A0A] p-6 rounded-3xl border border-white/5 space-y-1">
-                                <label className="text-[10px] text-[#00E6A0] font-black uppercase tracking-widest">Address *</label>
-                                <textarea
-                                    rows={3}
-                                    placeholder="Street, City, State, PIN"
-                                    value={address}
-                                    onChange={e => setAddress(e.target.value)}
-                                    className="w-full bg-transparent text-white text-sm py-2 border-b border-white/10 focus:outline-none focus:border-[#00E6A0] transition-colors placeholder:text-gray-600 resize-none"
-                                />
-                            </div>
-
-                            {/* Aadhar (optional) */}
-                            <div className="bg-[#0A0A0A] p-6 rounded-3xl border border-white/5 space-y-1">
-                                <label className="text-[10px] text-[#00E6A0] font-black uppercase tracking-widest">Aadhaar Card Number <span className="text-gray-600 normal-case tracking-normal font-normal">(Optional)</span></label>
-                                <input
-                                    type="text"
-                                    placeholder="XXXX XXXX XXXX"
-                                    value={aadhar}
-                                    onChange={e => setAadhar(e.target.value)}
-                                    maxLength={14}
-                                    className="w-full bg-transparent text-white text-base py-2 border-b border-white/10 focus:outline-none focus:border-[#00E6A0] transition-colors placeholder:text-gray-600 tracking-widest"
-                                />
-                            </div>
-
-                            {/* Captcha */}
-                            <div className="bg-[#0A0A0A] p-6 rounded-3xl border border-white/5 space-y-4">
-                                <label className="text-[10px] text-[#00E6A0] font-black uppercase tracking-widest block">Security Captcha *</label>
-                                <div className="flex items-center gap-4">
-                                    <div className="bg-white/5 border border-white/10 rounded-2xl px-6 py-3 font-black text-xl tracking-[0.4em] text-white select-none" style={{fontFamily:'monospace', letterSpacing:'0.5em'}}>
-                                        {captchaCode}
-                                    </div>
-                                    <Lock size={20} className="text-gray-500" />
-                                    <RefreshCw size={16} className="text-gray-600" />
-                                </div>
-                                <input
-                                    type="text"
-                                    placeholder="Type the code above"
-                                    value={captchaInput}
-                                    onChange={e => setCaptchaInput(e.target.value.toUpperCase())}
-                                    className="w-full bg-transparent text-white text-base py-2 border-b border-white/10 focus:outline-none focus:border-[#00E6A0] transition-colors placeholder:text-gray-600 tracking-widest"
-                                />
-                            </div>
 
                             {error && (
                                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm font-bold flex gap-3">
@@ -820,32 +984,115 @@ const BookingFlow = () => {
                                             <span>Service Tax (0%)</span>
                                             <span>₹0</span>
                                         </div>
+                                        
+                                        {/* Loyalty Point Redemption */}
+                                        <div className="pt-4 border-t border-white/10">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Award size={16} className="text-[#00E6A0]" />
+                                                    <span className="text-sm font-black text-white">Loyalty Balance: {userPoints} PTS</span>
+                                                </div>
+                                            </div>
+                                            
+                                            {paymentType !== 'full' ? (
+                                                <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mt-1">
+                                                    Available on Full Payment
+                                                </p>
+                                            ) : userPoints < 100 ? (
+                                                <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mt-1">
+                                                    Need 100+ points to redeem
+                                                </p>
+                                            ) : (
+                                                <div className="flex items-center justify-between bg-[#00E6A0]/5 p-3 rounded-xl border border-[#00E6A0]/20 mt-2">
+                                                    <div>
+                                                        <span className="text-xs font-bold text-[#00E6A0] block">
+                                                            Use {maxDiscountAllowed} Points?
+                                                        </span>
+                                                        <span className="text-[10px] text-gray-400 font-medium">
+                                                            Save ₹{maxDiscountAllowed} (Max 20%)
+                                                        </span>
+                                                    </div>
+                                                    <label className="relative inline-flex items-center cursor-pointer">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="sr-only peer"
+                                                            checked={usePoints}
+                                                            onChange={(e) => setUsePoints(e.target.checked)}
+                                                        />
+                                                        <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00E6A0]"></div>
+                                                    </label>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {usePoints && discountAmount > 0 && (
+                                            <div className="flex justify-between items-center text-sm text-[#00E6A0] font-bold">
+                                                <span>Points Discount</span>
+                                                <span>-₹{discountAmount}</span>
+                                            </div>
+                                        )}
+
                                         <div className="flex justify-between items-center pt-4">
                                             <span className="text-lg font-black text-white">Grand Total</span>
-                                            <span className="text-3xl font-black text-[#00E6A0]">₹{totalPrice}</span>
+                                            <span className="text-3xl font-black text-[#00E6A0]">₹{finalAmount}</span>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
                             <section>
-                                <h4 className="text-lg font-black mb-6">Payment Method</h4>
+                                <h4 className="text-lg font-black mb-6">Payment Option</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                                    <div
+                                        onClick={() => setPaymentType('advance')}
+                                        className={`p-6 rounded-[2rem] border transition-all cursor-pointer flex flex-col justify-center items-center text-center gap-2 ${paymentType === 'advance' ? 'bg-[#00E6A0]/10 border-[#00E6A0]' : 'bg-[#0A0A0A] border-white/5 hover:border-white/10'}`}
+                                    >
+                                        <h5 className={`font-black tracking-tight text-xl ${paymentType === 'advance' ? 'text-[#00E6A0]' : 'text-white'}`}>50% Advance</h5>
+                                        <p className="text-xs text-gray-500 font-bold">Pay ₹{Math.ceil(finalAmount / 2)} now to reserve</p>
+                                    </div>
+                                    <div
+                                        onClick={() => setPaymentType('full')}
+                                        className={`p-6 rounded-[2rem] border transition-all cursor-pointer flex flex-col justify-center items-center text-center gap-2 relative overflow-hidden ${paymentType === 'full' ? 'bg-[#00E6A0]/10 border-[#00E6A0]' : 'bg-[#0A0A0A] border-white/5 hover:border-white/10'}`}
+                                    >
+                                        <div className="absolute top-0 right-0 bg-[#00E6A0] text-black text-[9px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest flex items-center gap-1">
+                                            <Award size={10} /> Earn Points
+                                        </div>
+                                        <h5 className={`font-black tracking-tight text-xl ${paymentType === 'full' ? 'text-[#00E6A0]' : 'text-white'}`}>Full Payment</h5>
+                                        <p className="text-xs text-gray-500 font-bold">Pay ₹{finalAmount} now</p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h4 className="text-lg font-black">Payment Method</h4>
+                                    <span className="text-sm font-black text-[#00E6A0]">Payable: ₹{payableAmount}</span>
+                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {[
                                         { id: 'online', name: 'Instant Pay', desc: 'Secure Razorpay', icon: ShieldCheck },
-                                        { id: 'qr', name: 'UPI QR Scan', desc: 'Scan any app', icon: CreditCard }
+                                        { id: 'qr', name: 'UPI QR Scan', desc: 'Scan any app', icon: QrCode }
                                     ].map(method => (
                                         <div
                                             key={method.id}
-                                            onClick={() => setPaymentMethod(method.id)}
-                                            className={`p-8 rounded-[2.5rem] border transition-all cursor-pointer flex items-center gap-6 ${paymentMethod === method.id ? 'bg-[#00E6A0]/10 border-[#00E6A0]' : 'bg-[#0A0A0A] border-white/5 hover:border-white/10'}`}
+                                            onClick={() => {
+                                                if (!loading) {
+                                                    setPaymentMethod(method.id);
+                                                    handleConfirmBooking(method.id);
+                                                }
+                                            }}
+                                            className={`p-8 rounded-[2.5rem] border transition-all cursor-pointer flex items-center gap-6 ${paymentMethod === method.id ? 'bg-[#00E6A0]/10 border-[#00E6A0]' : 'bg-[#0A0A0A] border-white/5 hover:border-white/10'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         >
                                             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${paymentMethod === method.id ? 'bg-[#00E6A0] text-black shadow-lg shadow-[#00E6A0]/20' : 'bg-white/5 text-gray-500'}`}>
-                                                <method.icon size={24} />
+                                                {loading && paymentMethod === method.id ? (
+                                                    <RefreshCw size={24} className="animate-spin" />
+                                                ) : (
+                                                    <method.icon size={24} />
+                                                )}
                                             </div>
                                             <div>
                                                 <h5 className={`font-black tracking-tight ${paymentMethod === method.id ? 'text-[#00E6A0]' : 'text-white'}`}>{method.name}</h5>
-                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{method.desc}</p>
+                                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{loading && paymentMethod === method.id ? 'Connecting...' : method.desc}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -912,96 +1159,132 @@ const BookingFlow = () => {
                         )}
                         {step === 5 && (
                             <button
-                                disabled={!fullName || !phone || !otpVerified || (captchaInput !== captchaCode)}
+                                disabled={!fullName || !email || !otpVerified || (phone !== '' && phone.length !== 10)}
                                 onClick={() => setStep(6)}
-                                className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${fullName && phone && otpVerified && (captchaInput === captchaCode) ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
+                                className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${fullName && email && otpVerified && (phone === '' || phone.length === 10) ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
                             >
                                 Review & Pay <ArrowRight size={18} />
-                            </button>
-                        )}
-                        {step === 6 && (
-                            <button
-                                disabled={loading}
-                                onClick={handleConfirmBooking}
-                                className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${!loading ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed'}`}
-                            >
-                                {loading ? 'Processing Ritual...' : `Pay ₹${totalPrice}`} <Check size={20} />
                             </button>
                         )}
                     </div>
                 </div>
             )}
 
-            {/* QR Payment Modal */}
+            {/* UPI QR Payment Modal */}
             <AnimatePresence>
                 {showQRModal && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center p-6"
+                        className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-2xl flex items-center justify-center p-6"
                     >
                         <motion.div
-                            initial={{ scale: 0.9, y: 20 }}
+                            initial={{ scale: 0.85, y: 30 }}
                             animate={{ scale: 1, y: 0 }}
-                            className="bg-[#0A0A0A] border border-white/5 rounded-[4rem] p-12 max-w-sm w-full text-center relative overflow-hidden shadow-2xl"
+                            exit={{ scale: 0.85, y: 30 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                            className="bg-[#0D0D0D] border border-white/10 rounded-[3rem] p-10 max-w-sm w-full text-center relative overflow-hidden shadow-2xl"
                         >
-                            <div className="absolute top-0 right-0 p-12 text-[#00E6A0] opacity-5 -mr-12 -mt-12"><CreditCard size={200} /></div>
-
-                            <p className="text-[#00E6A0] font-black text-[10px] uppercase tracking-[0.4em] mb-8">Scan to Pay</p>
-                            <h3 className="text-3xl font-black text-white mb-2 leading-none">Instant <br /> UPI Transfer</h3>
-                            <p className="text-gray-400 text-xs mb-8">Pay to: <strong>Muhammed Nafih</strong></p>
-
-                            <div className="bg-white p-4 rounded-[2.5rem] mb-4 shadow-2xl shadow-[#00E6A0]/10 inline-block overflow-hidden">
-                                <img src="/assets/muhammed_nafih_qr.jpg" alt="Payment QR Code" className="w-[140px] h-[140px] object-cover rounded-[1.5rem]" />
-                            </div>
-                            <p className="text-gray-500 text-xs mb-6 font-medium bg-white/5 inline-block px-4 py-2 rounded-xl text-white">UPI ID: nafihnafp@oksbi</p>
-
-                            <div className="text-left bg-white/5 p-5 rounded-3xl border border-white/5 mb-6">
-                                <label className="text-[10px] text-[#00E6A0] font-black uppercase tracking-[0.1em] mb-2 block">2. Enter your UPI ID</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g., yourname@oksbi"
-                                    value={userUpiId}
-                                    onChange={(e) => setUserUpiId(e.target.value)}
-                                    className="w-full bg-transparent border-b border-white/20 text-white text-sm pb-2 placeholder:text-gray-600 focus:outline-none focus:border-[#00E6A0] transition-colors"
-                                />
-                                <p className="text-[10px] text-gray-500 mt-2 leading-relaxed">Provide the UPI ID you paid from so the shop can verify your payment.</p>
+                            {/* Decorative background glow */}
+                            <div className="absolute inset-0 pointer-events-none">
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-[#00E6A0]/5 rounded-full blur-3xl" />
                             </div>
 
+                            {/* Close button */}
                             <button
+                                onClick={() => setShowQRModal(false)}
+                                className="absolute top-5 right-5 p-2 text-gray-500 hover:text-white hover:bg-white/10 rounded-xl transition-all"
+                            >
+                                <X size={18} />
+                            </button>
+
+                            {/* Header */}
+                            <p className="text-[#00E6A0] font-black text-[10px] uppercase tracking-[0.4em] mb-3 relative">UPI Payment</p>
+                            <h3 className="text-2xl font-black text-white mb-1 relative">Scan & Pay</h3>
+                            <p className="text-xs text-gray-500 mb-8 relative">Use any UPI app to scan the code below</p>
+
+                            {/* QR Code */}
+                            <div className="bg-white p-5 rounded-[2rem] mb-6 shadow-xl shadow-[#00E6A0]/10 inline-block relative">
+                                <QRCodeSVG
+                                    value={`upi://pay?pa=beautex@upi&pn=Beautex%20Luxe&am=${payableAmount || 0}&cu=INR&tn=Booking%20for%20${selectedServices?.length || 0}%20services`}
+                                    size={190}
+                                    level="H"
+                                    includeMargin={false}
+                                    bgColor="#FFFFFF"
+                                    fgColor="#050505"
+                                />
+                            </div>
+
+                            {/* Amount */}
+                            <div className="mb-2 relative">
+                                <p className="text-3xl font-black text-white">₹{payableAmount}</p>
+                                <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">Total payable amount</p>
+                            </div>
+
+                            {/* UPI ID */}
+                            <p className="text-xs text-gray-600 mb-8 relative">UPI ID: <span className="text-gray-400 font-mono">beautex@upi</span></p>
+
+                            {/* Apps row */}
+                            <div className="flex justify-center gap-4 mb-8 relative">
+                                {['GPay', 'PhonePe', 'Paytm', 'BHIM'].map(app => (
+                                    <div key={app} className="text-center">
+                                        <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-1">
+                                            <QrCode size={16} className="text-gray-400" />
+                                        </div>
+                                        <p className="text-[8px] text-gray-600 font-bold">{app}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Confirm button */}
+                            <button
+                                disabled={loading}
                                 onClick={async () => {
                                     setLoading(true);
                                     try {
-                                        await api.post('/payments/verify-qr', {
-                                            booking_id: confirmation.id,
-                                            user_upi_id: userUpiId
-                                        });
-                                        setShowQRModal(false);
-                                        setStep(7);
-                                    } catch {
-                                        setError('Could not verify QR payment.');
-                                        setShowQRModal(false);
+                                        if (qrBooking?.id) {
+                                            await api.post('/payments/verify-qr', {
+                                                booking_id: qrBooking.id
+                                            });
+                                            // Optimistically update loyalty points in Redux (only for full payment)
+                                            const ptsEarned = paymentType === 'full' ? Math.floor(payableAmount / 100) : 0;
+                                            const storedUser = localStorage.getItem('user');
+                                            if (storedUser) {
+                                                try {
+                                                    const pUser = JSON.parse(storedUser);
+                                                    const currentPts = pUser.loyalty_points || 0;
+                                                    const newPts = Math.max(0, currentPts - discountAmount) + ptsEarned;
+                                                    dispatch(updateUser({ loyalty_points: newPts }));
+                                                } catch(e){}
+                                            }
+                                        }
+                                    } catch (err) {
+                                        console.warn('Could not verify QR payment server-side:', err.message);
+                                        // Still proceed to success screen — booking is pending at worst
                                     } finally {
                                         setLoading(false);
                                     }
+                                    setShowQRModal(false);
+                                    setConfirmation(qrBooking || { booking_number: 'QR-PAY' });
+                                    setStep(6);
                                 }}
-                                disabled={loading}
-                                className="w-full py-5 bg-[#00E6A0] hover:bg-white text-black rounded-3xl font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-[#00E6A0]/20"
+                                className={`w-full py-4 bg-[#00E6A0] hover:bg-white text-black rounded-2xl font-black uppercase tracking-widest text-xs transition-all shadow-xl shadow-[#00E6A0]/20 relative mb-3 ${loading ? 'opacity-60 cursor-wait' : ''}`}
                             >
-                                {loading ? 'Verifying...' : 'I have completed payment'}
+                                {loading ? 'Confirming...' : '✓ I have completed payment'}
                             </button>
 
                             <button
                                 onClick={() => setShowQRModal(false)}
-                                className="mt-4 text-[10px] text-gray-600 font-bold uppercase tracking-widest hover:text-white transition-colors"
+                                className="text-[10px] text-gray-600 font-bold uppercase tracking-widest hover:text-white transition-colors relative"
                             >
-                                Cancel Transaction
+                                Cancel
                             </button>
                         </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
+
         </div>
     );
 };

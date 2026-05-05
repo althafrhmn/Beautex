@@ -14,6 +14,8 @@ import PaymentManagement from '../components/admin/sections/PaymentManagement';
 import ReviewManagement from '../components/admin/sections/ReviewManagement';
 import SettingsManagement from '../components/admin/sections/SettingsManagement';
 import AdminManagement from '../components/admin/sections/AdminManagement';
+import CommunicationCenter from '../components/admin/sections/CommunicationCenter';
+import AdminBannerModeration from '../components/admin/sections/AdminBannerModeration';
 
 import {
     Search,
@@ -58,10 +60,12 @@ const AdminTerminal = () => {
             case 'customers': return <CustomerManagement />;
             case 'staff': return <StaffManagement />;
             case 'shops': return <ShopManagement />;
+            case 'moderation': return <AdminBannerModeration />;
             case 'services': return <ServiceManagement />;
             case 'payments': return <PaymentManagement />;
             case 'reviews': return <ReviewManagement />;
             case 'admins': return <AdminManagement />;
+            case 'communications': return <CommunicationCenter />;
             case 'settings': return <SettingsManagement />;
             default: return <DashboardOverview />;
         }

@@ -32,8 +32,8 @@ const ExploreSalons = () => {
                     name: s.name,
                     address: s.address || s.location || '—',
                     city: s.city || 'Global',
-                    rating: s.rating || (4.5 + Math.random() * 0.4).toFixed(1),
-                    reviews: '10+', 
+                    rating: s.rating_average || 0,
+                    reviews: s.rating_count ? `${s.rating_count}` : '0', 
                     category: s.tags?.includes('Beautician Styles') ? 'skin' : 
                               s.tags?.includes('Nail Art') ? 'nails' :
                               s.tags?.includes('Bridal & Makeup') ? 'makeup' :
@@ -180,7 +180,7 @@ const ExploreSalons = () => {
                                 <img src={salon.image} className="w-full h-full object-cover group-hover:scale-110 opacity-70 group-hover:opacity-100 transition-all duration-1000" alt={salon.name} />
                                 <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-2 border border-white/10">
                                     <Star size={14} className="text-amber-400 fill-amber-400" />
-                                    <span className="text-xs font-black text-white">{salon.rating}</span>
+                                    <span className="text-xs font-black text-white">{salon.rating > 0 ? salon.rating : 'New'}</span>
                                 </div>
                             </div>
 

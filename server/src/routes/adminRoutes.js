@@ -10,7 +10,8 @@ import {
     getAdminAnalytics,
     getAllAdmins,
     createAdminUser,
-    deleteAdmin
+    deleteAdmin,
+    getAllManagers
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -30,5 +31,6 @@ router.get('/analytics', getAdminAnalytics);
 router.get('/users', getAllAdmins);
 router.post('/users', createAdminUser);
 router.delete('/users/:id', deleteAdmin);
+router.get('/managers', getAllManagers);
 
 export default router;

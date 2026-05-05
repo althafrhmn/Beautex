@@ -22,13 +22,10 @@ const AdminLogin = () => {
     const navigate = useNavigate();
     const location = useLocation();
 
-    // Redirect if already authenticated
+    // Set page title
     useEffect(() => {
         document.title = "Beautex | Admin portal";
-        if (isAuthenticated && currentRole === 'admin') {
-            navigate('/admin', { replace: true });
-        }
-    }, [isAuthenticated, currentRole, navigate]);
+    }, []);
 
     const handleLogin = async (e) => {
         e.preventDefault();
@@ -41,7 +38,7 @@ const AdminLogin = () => {
             return;
         }
 
-        if (securityCode !== ADMIN_SECURITY_CODE) {
+        if (securityCode.trim().toUpperCase() !== ADMIN_SECURITY_CODE) {
             setError('Invalid Security Clearance Code.');
             setLoading(false);
             return;

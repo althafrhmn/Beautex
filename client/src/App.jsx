@@ -29,16 +29,25 @@ function App() {
 
   useEffect(() => {
     const fetchProfileAndLogin = async (session) => {
-      const { data: profile } = await supabase
+      // 1. First check the profiles table for a persisted role and loyalty points
+      const { data: profile, error } = await supabase
         .from('profiles')
-        .select('role, full_name')
+        .select('role, full_name, assigned_shop, manager_pin, loyalty_points')
         .eq('id', session.user.id)
         .maybeSingle();
 
+      // 2. Identify the role: Database (Highest Priority) > Metadata (Fallback) > Customer (Default)
       const role = profile?.role || session.user?.user_metadata?.role || 'customer';
 
+      // 3. Update Redux store
       dispatch(loginSuccess({
-        user: { ...session.user, full_name: profile?.full_name },
+        user: { 
+          ...session.user, 
+          full_name: profile?.full_name || session.user?.user_metadata?.full_name, 
+          assigned_shop: profile?.assigned_shop,
+          manager_pin: profile?.manager_pin,
+          loyalty_points: profile?.loyalty_points || 0
+        },
         token: session.access_token,
         role: role
       }));
@@ -81,9 +90,9 @@ function App() {
           <Route path="/salon/:id" element={<SalonDetail />} />
           <Route path="/bookings" element={<PrivateRoute><BookingPage /></PrivateRoute>} />
           <Route path="/my-bookings" element={<PrivateRoute><BookingPage view="history" /></PrivateRoute>} />
-          <Route path="/admin" element={<PrivateRoute><AdminTerminal /></PrivateRoute>} />
+          <Route path="/admin" element={<PrivateRoute requiredRole="admin"><AdminTerminal /></PrivateRoute>} />
           <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/staff/dashboard" element={<PrivateRoute><StaffDashboard /></PrivateRoute>} />
+          <Route path="/staff/dashboard" element={<PrivateRoute requiredRoles={['staff', 'manager']}><StaffDashboard /></PrivateRoute>} />
 
         </Routes>
       </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Edit2, Trash2, X, User, Mail, Phone, Briefcase, Award, Store, Eye, EyeOff, ChevronDown, Check } from 'lucide-react';
 import api from '../../../utils/api';
+import CircularTimePicker from '../../shared/CircularTimePicker';
 
 const SPECIALITIES = ['Hair Stylist', 'Makeup Artist', 'Beautician', 'Nail Artist', 'Facial Specialist'];
 
@@ -26,8 +27,48 @@ const StaffManagement = () => {
     const [serviceDropdownOpen, setServiceDropdownOpen] = useState(false);
     const serviceDropdownRef = useRef(null);
 
-    const emptyForm = { fullName: '', email: '', phone: '', password: '', speciality: '', experience: '', assignedShop: '', avatarUrl: '' };
+    const emptyForm = { fullName: '', email: '', phone: '', password: '', speciality: '', experience: '', assignedShop: '', avatarUrl: '', workingHoursType: 'shop', customStart: '09:00', customEnd: '18:00', slot_duration: 30 };
     const [form, setForm] = useState(emptyForm);
+
+    // Quick Service Creation State
+    const [isQuickServiceOpen, setIsQuickServiceOpen] = useState(false);
+    const [quickServiceForm, setQuickServiceForm] = useState({
+        name: '',
+        category: 'Hair Cutting Styles',
+        price: '100'
+    });
+    const [quickServiceSaving, setQuickServiceSaving] = useState(false);
+
+    const handleQuickServiceCreate = async (e) => {
+        if (e) e.preventDefault();
+        setQuickServiceSaving(true);
+        try {
+            const res = await api.post('/services', {
+                ...quickServiceForm,
+                duration_minutes: 30,
+                description: `Express creation for stylist ${form.fullName}`
+            });
+            const newService = res.data.service;
+            
+            // Re-fetch all services
+            await fetchServices();
+            
+            // Automatically assign to current staff member
+            addStaffService({
+                id: newService.id,
+                name: newService.name,
+                price: newService.price,
+                category: newService.category
+            });
+            
+            setQuickServiceForm({ name: '', category: 'Hair Cutting Styles', price: '100' });
+            setIsQuickServiceOpen(false);
+        } catch (err) {
+            alert('Error creating service: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setQuickServiceSaving(false);
+        }
+    };
 
     useEffect(() => {
         fetchStaff();
@@ -107,7 +148,11 @@ const StaffManagement = () => {
             speciality: member.specialization || member.speciality || '',
             experience: member.experience || '',
             assignedShop,
-            avatarUrl: member.avatar_url || ''
+            avatarUrl: member.avatar_url || '',
+            workingHoursType: member.working_hours ? 'custom' : 'shop',
+            customStart: member.working_hours?.fri?.start || '09:00',
+            customEnd: member.working_hours?.fri?.end || '18:00',
+            slot_duration: member.slot_duration || 30
         });
         setShopSearch(assignedShop);
         setServiceSearch('');
@@ -123,18 +168,35 @@ const StaffManagement = () => {
             return;
         }
         if (!editingStaff && !form.password) {
-            setError('Password is required for new staff.');
+            setError('Password is required for new stylists.');
+            return;
+        }
+        if (form.password && (form.password.length < 6 || form.password.length > 12)) {
+            setError('Password must be between 6 and 12 characters.');
             return;
         }
 
         setSaving(true);
         setError('');
         try {
+            // Prepare working hours payload
+            const working_hours = form.workingHoursType === 'shop' ? null : {
+                mon: { start: form.customStart, end: form.customEnd },
+                tue: { start: form.customStart, end: form.customEnd },
+                wed: { start: form.customStart, end: form.customEnd },
+                thu: { start: form.customStart, end: form.customEnd },
+                fri: { start: form.customStart, end: form.customEnd },
+                sat: { start: form.customStart, end: form.customEnd },
+                sun: { start: form.customStart, end: form.customEnd }
+            };
+
+            const payload = { ...form, working_hours };
+
             let staffId = editingStaff?.id;
             if (editingStaff) {
-                await api.put(`/staff/${staffId}`, form);
+                await api.put(`/staff/${staffId}`, payload);
             } else {
-                const res = await api.post('/staff/create', form);
+                const res = await api.post('/staff/create', payload);
                 staffId = res.data.staff?.id;
             }
 
@@ -164,9 +226,12 @@ const StaffManagement = () => {
     };
 
     const addStaffService = (s) => {
-        if (assignedServices.some(as => as.id === s.id)) return;
+        if (assignedServices.some(as => as.id === s.id)) {
+            removeStaffService(s.id);
+            return;
+        }
         setAssignedServices(prev => [...prev, s]);
-        setServiceDropdownOpen(false);
+        // Do NOT close dropdown for multi-select parity
     };
 
     const removeStaffService = (id) => {
@@ -184,12 +249,12 @@ const StaffManagement = () => {
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Staff Management</h2>
+                    <h2 className="text-2xl font-bold tracking-tight">Stylist Management</h2>
                     <p className="text-gray-400 text-sm mt-1">Add and manage salon professionals</p>
                 </div>
                 <button onClick={openAddModal} className="flex items-center gap-2 bg-[#00E6A0] hover:bg-[#00C88B] text-[#141414] px-5 py-2.5 rounded-xl font-bold text-sm transition-colors">
                     <Plus size={18} />
-                    Add New Staff
+                    Add New Stylist
                 </button>
             </div>
 
@@ -276,7 +341,7 @@ const StaffManagement = () => {
                     <div className="bg-[#141414] border border-[#2A2A2A] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl">
                         {/* Header */}
                         <div className="flex items-center justify-between p-6 border-b border-[#2A2A2A]">
-                            <h3 className="text-lg font-bold text-white">{editingStaff ? 'Edit Staff Member' : 'Add New Staff'}</h3>
+                            <h3 className="text-lg font-bold text-white">{editingStaff ? 'Edit Stylist' : 'Add New Stylist'}</h3>
                             <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-white hover:bg-[#2A2A2A] rounded-lg transition-colors">
                                 <X size={20} />
                             </button>
@@ -319,9 +384,17 @@ const StaffManagement = () => {
                                 <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Phone Number</label>
                                 <div className="relative">
                                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
-                                    <input type="text" value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})}
+                                    <input 
+                                        type="tel" 
+                                        maxLength="10"
+                                        value={form.phone} 
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            if (val.length <= 10) setForm({...form, phone: val});
+                                        }}
                                         className="w-full bg-[#1A1A1A] border border-[#2A2A2A] rounded-xl pl-10 pr-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] transition-colors"
-                                        placeholder="+91 XXXXX XXXXX" />
+                                        placeholder="10-digit Number" 
+                                    />
                                 </div>
                             </div>
 
@@ -352,6 +425,56 @@ const StaffManagement = () => {
                                     <option value="">Select speciality</option>
                                     {SPECIALITIES.map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
+                            </div>
+
+                            {/* Working Hours */}
+                            <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-2xl p-5 space-y-4">
+                                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block">Working Schedule</label>
+                                <div className="flex gap-2">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setForm({...form, workingHoursType: 'shop'})}
+                                        className={`flex-1 py-3 text-xs font-bold rounded-xl border transition-all ${form.workingHoursType === 'shop' ? 'bg-[#00E6A0]/10 border-[#00E6A0] text-[#00E6A0]' : 'bg-[#141414] border-transparent text-gray-500'}`}
+                                    >
+                                        Same as Shop
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setForm({...form, workingHoursType: 'custom'})}
+                                        className={`flex-1 py-3 text-xs font-bold rounded-xl border transition-all ${form.workingHoursType === 'custom' ? 'bg-[#00E6A0]/10 border-[#00E6A0] text-[#00E6A0]' : 'bg-[#141414] border-transparent text-gray-500'}`}
+                                    >
+                                        Custom Hours
+                                    </button>
+                                </div>
+                                {form.workingHoursType === 'custom' && (
+                                    <div className="grid grid-cols-2 gap-4 pt-2 animate-in slide-in-from-top-1 duration-200">
+                                        <CircularTimePicker label="Starts At" value={form.customStart} onChange={val => setForm({...form, customStart: val})} />
+                                        <CircularTimePicker label="Ends At" value={form.customEnd} onChange={val => setForm({...form, customEnd: val})} />
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Slot Duration */}
+                            <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-2xl p-5 space-y-4">
+                                <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block flex justify-between">
+                                    <span>Slot Duration</span>
+                                    <span className="text-[#00E6A0]">{form.slot_duration} Minutes</span>
+                                </label>
+                                <div className="space-y-4">
+                                    <input 
+                                        type="range" min="15" max="180" step="15" 
+                                        value={form.slot_duration} 
+                                        onChange={e => setForm({...form, slot_duration: parseInt(e.target.value)})}
+                                        className="w-full accent-[#00E6A0]" 
+                                    />
+                                    <div className="flex justify-between text-[10px] text-gray-500 font-bold uppercase">
+                                        <span>15m</span>
+                                        <span>60m (1hr)</span>
+                                        <span>120m (2hr)</span>
+                                        <span>180m (3hr)</span>
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-gray-500 italic">This defines the booking interval for "Long taking styles" like Bridal Makeup.</p>
                             </div>
 
                             {/* Experience */}
@@ -446,18 +569,37 @@ const StaffManagement = () => {
                                     />
                                     
                                     {serviceDropdownOpen && (
-                                        <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl shadow-2xl max-h-48 overflow-y-auto overflow-x-hidden">
+                                        <div className="absolute z-[210] top-full left-0 right-0 mt-1 bg-[#1E1E1E] border border-[#2A2A2A] rounded-xl shadow-2xl max-h-48 overflow-y-auto overflow-x-hidden">
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setIsQuickServiceOpen(true)}
+                                                className="w-full text-[#00E6A0] px-4 py-3 hover:bg-[#00E6A0]/5 border-b border-white/5 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest bg-[#00E6A0]/5"
+                                            >
+                                                <Plus size={14} /> Create Brand New Service
+                                            </button>
                                             {allServices
                                                 .filter(s => s.name?.toLowerCase().includes((serviceSearch || '').toLowerCase()))
-                                                .map(s => (
-                                                    <button key={s.id} type="button" onClick={() => addStaffService(s)} className="w-full text-left px-4 py-3 hover:bg-[#2A2A2A] flex justify-between items-center group border-b border-white/5 last:border-none">
-                                                        <div className="flex-1 overflow-hidden">
-                                                            <p className="text-sm font-bold text-white truncate">{s.name}</p>
-                                                            <p className="text-[10px] text-gray-500 uppercase">₹{s.price} · {s.category}</p>
-                                                        </div>
-                                                        <Plus size={14} className="text-gray-600 group-hover:text-[#00E6A0] transition-colors" />
-                                                    </button>
-                                                ))}
+                                                .map(s => {
+                                                    const isAssigned = assignedServices.some(as => as.id === s.id);
+                                                    return (
+                                                        <button 
+                                                            key={s.id} 
+                                                            type="button" 
+                                                            onClick={() => addStaffService(s)} 
+                                                            className={`w-full text-left px-4 py-3 hover:bg-[#2A2A2A] flex justify-between items-center group border-b border-white/5 last:border-none ${isAssigned ? 'bg-[#00E6A0]/5' : ''}`}
+                                                        >
+                                                            <div className="flex-1 overflow-hidden">
+                                                                <p className={`text-sm font-bold truncate ${isAssigned ? 'text-[#00E6A0]' : 'text-white'}`}>{s.name}</p>
+                                                                <p className="text-[10px] text-gray-500 uppercase">₹{s.price} · {s.category}</p>
+                                                            </div>
+                                                            {isAssigned ? (
+                                                                <Check size={14} className="text-[#00E6A0]" />
+                                                            ) : (
+                                                                <Plus size={14} className="text-gray-600 group-hover:text-[#00E6A0] transition-colors" />
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
                                         </div>
                                     )}
                                 </div>
@@ -497,10 +639,64 @@ const StaffManagement = () => {
                             <button onClick={handleSave} disabled={saving}
                                 className="px-6 py-2.5 bg-[#00E6A0] hover:bg-[#00C88B] text-[#141414] rounded-xl font-bold text-sm transition-colors disabled:opacity-50 flex items-center gap-2">
                                 {saving && <div className="w-4 h-4 border-2 border-[#141414] border-t-transparent rounded-full animate-spin" />}
-                                {editingStaff ? 'Save Changes' : 'Create Staff Account'}
+                                {editingStaff ? 'Save Changes' : 'Create Stylist Account'}
                             </button>
                         </div>
                     </div>
+
+                    {/* Quick Service Modal Inner Overlay */}
+                    {isQuickServiceOpen && (
+                        <div className="absolute inset-0 z-[250] flex items-center justify-center p-4">
+                            <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setIsQuickServiceOpen(false)} />
+                            <div className="relative w-full max-w-sm bg-[#1A1A1A] border border-[#2A2A2A] rounded-[2rem] p-8 shadow-2xl animate-in zoom-in-95 duration-200">
+                                <h4 className="text-xl font-black text-white tracking-tighter mb-4 text-center">Quick <span className="text-[#00E6A0]">Ritual</span></h4>
+                                <div className="space-y-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Ritual Name</label>
+                                        <input 
+                                            type="text" 
+                                            autoFocus
+                                            className="w-full bg-[#111] border border-[#2A2A2A] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0]"
+                                            value={quickServiceForm.name}
+                                            onChange={(e) => setQuickServiceForm(p => ({ ...p, name: e.target.value }))}
+                                            placeholder="e.g. Silk Threading"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Category</label>
+                                        <select 
+                                            className="w-full bg-[#111] border border-[#2A2A2A] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0] appearance-none"
+                                            value={quickServiceForm.category}
+                                            onChange={(e) => setQuickServiceForm(p => ({ ...p, category: e.target.value }))}
+                                        >
+                                            {['Hair Cutting Styles', 'Beautician Styles', 'Bridal & Makeup', 'Grooming', 'Nail Art', 'Massage & Spa'].map(c => (
+                                                <option key={c} value={c}>{c}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Standard Price (₹)</label>
+                                        <input 
+                                            type="number" 
+                                            className="w-full bg-[#111] border border-[#2A2A2A] rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#00E6A0]"
+                                            value={quickServiceForm.price}
+                                            onChange={(e) => setQuickServiceForm(p => ({ ...p, price: e.target.value }))}
+                                        />
+                                    </div>
+                                    <div className="flex gap-2 pt-2">
+                                        <button onClick={() => setIsQuickServiceOpen(false)} className="flex-1 py-3 text-[10px] font-black uppercase text-gray-500 hover:text-white transition-colors">Cancel</button>
+                                        <button 
+                                            onClick={handleQuickServiceCreate} 
+                                            disabled={quickServiceSaving || !quickServiceForm.name}
+                                            className="flex-1 py-3 bg-[#00E6A0] hover:bg-white text-[#050505] rounded-xl text-[10px] font-black uppercase tracking-[0.2rem] transition-all disabled:opacity-50"
+                                        >
+                                            {quickServiceSaving ? 'Creating...' : 'Create'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

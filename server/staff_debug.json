@@ -1,0 +1,32 @@
+[
+  {
+    "email": "althafrahman961@gmail.com",
+    "role": "staff",
+    "assigned_shop": "1effd55b-ad0e-4972-9aa-33bd3e49b93c"
+  },
+  {
+    "email": "qader@gmail.com",
+    "role": "staff",
+    "assigned_shop": "Haircraft"
+  },
+  {
+    "email": "jinsila@gmail.com",
+    "role": "staff",
+    "assigned_shop": "Laika"
+  },
+  {
+    "email": "Saufeer@gmail.com",
+    "role": "staff",
+    "assigned_shop": "Haircraft"
+  },
+  {
+    "email": "nafihn@gmail.com",
+    "role": "staff",
+    "assigned_shop": "Nafi Salon Vaaplimuk"
+  },
+  {
+    "email": "shifna@gmail.com",
+    "role": "staff",
+    "assigned_shop": "Haircraft"
+  }
+]

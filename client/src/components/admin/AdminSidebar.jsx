@@ -10,21 +10,20 @@ import {
     Star,
     Settings,
     LogOut,
-    Shield
+    Shield,
+    MessageSquare,
+    Megaphone
 } from 'lucide-react';
 
 const AdminSidebar = ({ activeTab, setActiveTab, onLogout }) => {
     const menuItems = [
-        { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'bookings', label: 'Bookings', icon: CalendarCheck },
-        { id: 'customers', label: 'Customers', icon: Users },
-        { id: 'staff', label: 'Staff', icon: Briefcase },
-        { id: 'admins', label: 'Admin Team', icon: Shield },
-        { id: 'shops', label: 'Shops', icon: Store },
-        { id: 'services', label: 'Services', icon: Scissors },
-        { id: 'payments', label: 'Payments', icon: CreditCard },
-        { id: 'reviews', label: 'Reviews', icon: Star },
-        { id: 'settings', label: 'Settings', icon: Settings },
+        { id: 'overview', label: 'Intelligence', icon: LayoutDashboard },
+        { id: 'shops', label: 'Sanctuaries', icon: Store },
+        { id: 'moderation', label: 'Broadcast Station', icon: Megaphone },
+        { id: 'staff', label: 'Community', icon: Users },
+        { id: 'communications', label: 'B2B Hub', icon: MessageSquare },
+        { id: 'payments', label: 'Commerce', icon: CreditCard },
+        { id: 'settings', label: 'System', icon: Settings },
     ];
 
     return (

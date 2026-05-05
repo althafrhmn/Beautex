@@ -5,17 +5,34 @@ import {
     Users,
     Scissors,
     User,
-    LogOut
+    LogOut,
+    ShieldAlert,
+    BarChart3,
+    Inbox,
+    FileText,
+    Package,
+    Megaphone
 } from 'lucide-react';
 
-const StaffSidebar = ({ activeTab, setActiveTab, onLogout }) => {
-    const menuItems = [
+const StaffSidebar = ({ activeTab, setActiveTab, onLogout, isManagementMode, setIsManagementMode, setShowPinPrompt, role }) => {
+    const staffItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'bookings', label: 'My Bookings', icon: CalendarCheck },
-        { id: 'customers', label: 'Assigned Customers', icon: Users },
+        { id: 'customers', label: 'Customers', icon: Users },
         { id: 'services', label: 'Services', icon: Scissors },
         { id: 'profile', label: 'Profile', icon: User },
+        { id: 'announcements', label: 'News Feed', icon: Megaphone },
     ];
+
+    const managerItems = [
+        { id: 'analytics', label: 'Executive Stats', icon: BarChart3 },
+        { id: 'inbox', label: 'B2B Inbox', icon: Inbox },
+        { id: 'reports', label: 'Report Station', icon: FileText },
+        { id: 'inventory', label: 'Store Inventory', icon: Package },
+        { id: 'announcements', label: 'Broadcast Station', icon: Megaphone },
+    ];
+
+    const menuItems = isManagementMode ? managerItems : staffItems;
 
     return (
         <aside className="w-72 h-screen bg-[#141414] border-r border-[#2A2A2A] flex flex-col sticky top-0 z-[100] font-sans">
@@ -27,7 +44,7 @@ const StaffSidebar = ({ activeTab, setActiveTab, onLogout }) => {
                     </div>
                     <div>
                         <h2 className="text-xl font-bold text-white tracking-wide">
-                            Beaute<span className="text-[#00E6A0]">X</span>
+                            Beaute<span className={`${isManagementMode ? 'text-[#00D1FF]' : 'text-[#00E6A0]'}`}>X</span>
                         </h2>
                         <span className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">
                             Staff Portal
@@ -47,7 +64,7 @@ const StaffSidebar = ({ activeTab, setActiveTab, onLogout }) => {
                             onClick={() => setActiveTab(item.id)}
                             className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl transition-all duration-200 group ${
                                 isActive
-                                    ? 'bg-[#212121] text-[#00E6A0] shadow-sm'
+                                    ? `bg-[#212121] ${isManagementMode ? 'text-[#00D1FF]' : 'text-[#00E6A0]'} shadow-sm`
                                     : 'text-gray-400 hover:text-white hover:bg-[#1A1A1A]'
                             }`}
                         >
@@ -58,15 +75,35 @@ const StaffSidebar = ({ activeTab, setActiveTab, onLogout }) => {
                                 {item.label}
                             </span>
                             {isActive && (
-                                <div className="ml-auto w-1 h-4 rounded-full bg-[#00E6A0]" />
+                                <div className={`ml-auto w-1 h-4 rounded-full ${isManagementMode ? 'bg-[#00D1FF]' : 'bg-[#00E6A0]'}`} />
                             )}
                         </button>
                     );
                 })}
             </nav>
 
-            {/* Logout */}
-            <div className="p-6 border-t border-[#2A2A2A]">
+            {/* Logout & Mode Switch */}
+            <div className="p-6 border-t border-[#2A2A2A] space-y-3">
+                {(role === 'manager' || role === 'admin' || (role === 'staff' && setIsManagementMode)) && (
+                    <button
+                        onClick={() => {
+                            if (isManagementMode) {
+                                setIsManagementMode(false);
+                                setActiveTab('dashboard');
+                            } else {
+                                setShowPinPrompt(true);
+                            }
+                        }}
+                        className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest border ${
+                            isManagementMode 
+                                ? 'bg-[#00D1FF]/10 border-[#00D1FF]/30 text-[#00D1FF] shadow-[0_0_15px_rgba(0,209,255,0.1)]' 
+                                : 'bg-white/5 border-white/5 text-gray-400 hover:text-white hover:border-white/20'
+                        }`}
+                    >
+                        <ShieldAlert size={14} />
+                        {isManagementMode ? 'Exit Executive View' : 'Manager Executive View'}
+                    </button>
+                )}
                 <button
                     onClick={onLogout}
                     className="w-full flex items-center justify-center gap-2 px-4 py-3 text-[#FF5A5A] bg-[#2A1414] hover:bg-[#3A1818] rounded-xl transition-all font-semibold text-sm"

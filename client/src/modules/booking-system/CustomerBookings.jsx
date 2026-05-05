@@ -1,37 +1,57 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Calendar, Clock, MapPin, Scissors, XCircle,
-    AlertCircle, ChevronRight, Hash, Phone,
-    CheckCircle, MessageSquare, ArrowLeft, ArrowRight,
-    Tag, CreditCard, Timer, ArrowUpRight
+    Calendar, Clock, Scissors,
+    CheckCircle, ArrowLeft,
+    Tag, CreditCard, Timer, Star
 } from 'lucide-react';
-import { useSelector } from 'react-redux';
+import { supabase } from '../../utils/supabaseClient';
 import api from '../../utils/api';
 
 const CustomerBookings = () => {
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'past'
+    const [error, setError] = useState(null);
+    const [activeTab, setActiveTab] = useState('upcoming');
     const [reschedulingBooking, setReschedulingBooking] = useState(null);
     const [newDate, setNewDate] = useState('');
     const [newSlot, setNewSlot] = useState('');
     const [availableSlots, setAvailableSlots] = useState([]);
-    const { token } = useSelector((state) => state.auth);
+    
+    // Rating State
+    const [ratingModal, setRatingModal] = useState({ isOpen: false, booking: null, rating: 0 });
+    const [submittingRating, setSubmittingRating] = useState(false);
 
     useEffect(() => {
-        if (token) {
-            fetchData();
-        } else {
-            setLoading(false);
-        }
-    }, [token]);
+        fetchData();
+    }, []);
 
     const fetchData = async () => {
+        setLoading(true);
+        setError(null);
         try {
+            // Always try to get a valid session token directly from Supabase
+            // This avoids Redux async timing issues
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session?.access_token) {
+                // Check localStorage fallback (set during login)
+                const stored = localStorage.getItem('token');
+                if (!stored) {
+                    setError('Please log in to view your bookings.');
+                    setLoading(false);
+                    return;
+                }
+            }
+
             const res = await api.get('/bookings/my-bookings');
             setBookings(res.data.bookings || []);
         } catch (err) {
             console.error('Error fetching bookings:', err);
+            if (err.response?.status === 401) {
+                setError('Session expired. Please log in again.');
+            } else {
+                setError('Could not load bookings. Please try again.');
+            }
         } finally {
             setLoading(false);
         }
@@ -79,6 +99,24 @@ const CustomerBookings = () => {
         }
     };
 
+    const submitRating = async () => {
+        if (ratingModal.rating === 0) return alert('Please select a rating');
+        setSubmittingRating(true);
+        try {
+            await api.post('/reviews', {
+                booking_id: ratingModal.booking.id,
+                salon_id: ratingModal.booking.salon_id,
+                rating: ratingModal.rating
+            });
+            setRatingModal({ isOpen: false, booking: null, rating: 0 });
+            await fetchData(); // Refresh data to show has_review flag
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to submit rating');
+        } finally {
+            setSubmittingRating(false);
+        }
+    };
+
     if (loading) return (
         <div className="flex flex-col items-center justify-center p-32 bg-[#050505] min-h-screen">
             <div className="w-10 h-10 border-4 border-[#00E6A0] border-t-transparent rounded-full animate-spin mb-4" />
@@ -86,8 +124,39 @@ const CustomerBookings = () => {
         </div>
     );
 
-    const upcoming = bookings.filter(b => ['confirmed', 'pending', 'rescheduled'].includes(b.status));
-    const past = bookings.filter(b => ['completed', 'cancelled'].includes(b.status));
+    if (error) return (
+        <div className="flex flex-col items-center justify-center p-32 bg-[#050505] min-h-screen text-center">
+            <div className="w-16 h-16 bg-red-500/10 rounded-[1.5rem] flex items-center justify-center mx-auto mb-6">
+                <CheckCircle size={28} className="text-red-400" />
+            </div>
+            <p className="text-white font-bold mb-2">Unable to load bookings</p>
+            <p className="text-gray-500 text-sm mb-6">{error}</p>
+            <button onClick={fetchData} className="px-6 py-3 bg-[#00E6A0] text-black rounded-xl font-bold text-sm">Try Again</button>
+        </div>
+    );
+
+    const now = new Date();
+
+    const hasTimePassed = (dateStr, timeStr) => {
+        try {
+            // booking_date is 'YYYY-MM-DD', start_time is 'HH:MM:SS' or 'HH:MM'
+            const bookingDateTime = new Date(`${dateStr}T${timeStr}`);
+            return bookingDateTime < now;
+        } catch {
+            return false;
+        }
+    };
+
+    const upcoming = bookings.filter(b => {
+        if (b.status === 'cancelled' || b.status === 'completed') return false;
+        return !hasTimePassed(b.booking_date, b.start_time);
+    });
+
+    const past = bookings.filter(b => {
+        if (b.status === 'cancelled' || b.status === 'completed') return true;
+        return hasTimePassed(b.booking_date, b.start_time);
+    });
+
     const displayedBookings = activeTab === 'upcoming' ? upcoming : past;
 
     const getTimeRemaining = (dateStr, timeStr) => {
@@ -192,19 +261,13 @@ const CustomerBookings = () => {
                                 )}
                             </div>
 
-                            {activeTab === 'upcoming' && (
-                                <div className="flex gap-4 pt-4 border-t border-white/5">
+                            {!b.has_review && (b.status === 'confirmed' || b.status === 'completed') && (
+                                <div className="pt-4 border-t border-white/5">
                                     <button
-                                        onClick={() => handleRescheduleClick(b)}
-                                        className="flex-1 py-4 bg-[#00E6A0]/10 text-[#00E6A0] rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-[#00E6A0] hover:text-[#050505] transition-all"
+                                        onClick={() => setRatingModal({ isOpen: true, booking: b, rating: 5 })}
+                                        className="w-full py-4 bg-amber-400/10 text-amber-400 rounded-2xl text-[10px] sm:text-xs font-black uppercase tracking-widest hover:bg-amber-400 hover:text-[#050505] transition-all flex items-center justify-center gap-2"
                                     >
-                                        Reschedule
-                                    </button>
-                                    <button
-                                        onClick={() => handleCancel(b.id)}
-                                        className="flex-1 py-4 bg-white/5 text-gray-400 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all"
-                                    >
-                                        Cancel
+                                        <Star size={14} /> Rate Shop
                                     </button>
                                 </div>
                             )}
@@ -262,6 +325,44 @@ const CustomerBookings = () => {
                         </div>
                     </div>
             )}
+
+                {/* Rating Modal */}
+                {ratingModal.isOpen && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+                        <div className="bg-[#0A0A0A] w-full max-w-sm rounded-[2rem] p-6 border border-white/10 shadow-2xl relative animate-in slide-in-from-bottom-8">
+                            <h2 className="text-xl font-black text-white mb-2">Rate your visit</h2>
+                            <p className="text-xs font-bold text-gray-500 mb-6">How was your experience at {ratingModal.booking?.salons?.name}?</p>
+                            
+                            <div className="flex justify-center gap-2 mb-8">
+                                {[1, 2, 3, 4, 5].map((star) => (
+                                    <button
+                                        key={star}
+                                        onClick={() => setRatingModal(prev => ({ ...prev, rating: star }))}
+                                        className={`transition-all ${star <= ratingModal.rating ? 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)] scale-110' : 'text-gray-800 hover:text-gray-600'}`}
+                                    >
+                                        <Star size={40} fill={star <= ratingModal.rating ? 'currentColor' : 'none'} strokeWidth={1.5} />
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setRatingModal({ isOpen: false, booking: null, rating: 0 })}
+                                    className="flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest bg-white/5 text-white hover:bg-white/10 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={submitRating}
+                                    disabled={submittingRating || ratingModal.rating === 0}
+                                    className="flex-1 py-4 rounded-xl font-black text-xs uppercase tracking-widest bg-amber-400 text-black hover:bg-amber-300 disabled:opacity-50 transition-all"
+                                >
+                                    {submittingRating ? 'Saving...' : 'Submit'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
         </div>
     );
 };

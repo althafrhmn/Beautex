@@ -12,75 +12,36 @@ const Locations = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCity, setSelectedCity] = useState('All');
 
-    // High Fidelity Salon Data
-    const salons = [
-        {
-            id: 1,
-            name: "The Palace Sanctuary",
-            address: "Altamount Road",
-            city: "Mumbai",
-            rating: 4.9,
-            reviews: "2.1K",
-            image: "https://images.unsplash.com/photo-1512690196152-730d4375338c?auto=format&fit=crop&q=80&w=800",
-            phone: "+91 22 2351 0000",
-            timing: "10:00 AM - 09:00 PM"
-        },
-        {
-            id: 2,
-            name: "Emerald Oasis",
-            address: "Indiranagar",
-            city: "Bangalore",
-            rating: 4.8,
-            reviews: "1.5K",
-            image: "https://images.unsplash.com/photo-1520333789090-1afc82db536a?auto=format&fit=crop&q=80&w=800",
-            phone: "+91 80 4123 4567",
-            timing: "09:00 AM - 08:30 PM"
-        },
-        {
-            id: 3,
-            name: "Azure Retreat",
-            address: "Marine Drive",
-            city: "Kochi",
-            rating: 4.9,
-            reviews: "3.2K",
-            image: "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800",
-            phone: "+91 484 235 9999",
-            timing: "08:00 AM - 10:00 PM"
-        },
-        {
-            id: 11,
-            name: "Golden Hour Studio",
-            address: "Civil Station",
-            city: "Calicut",
-            rating: 4.9,
-            reviews: "2.1K",
-            image: "https://images.unsplash.com/photo-1595475243692-3a387f34081c?auto=format&fit=crop&q=80&w=800",
-            phone: "+91 495 244 8888",
-            timing: "09:30 AM - 08:00 PM"
-        },
-        {
-            id: 10,
-            name: "Verve Gentlemen's Lounge",
-            address: "Bypass Road",
-            city: "Perintalmanna",
-            rating: 4.7,
-            reviews: "950",
-            image: "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&q=80&w=800",
-            phone: "+91 98470 55555",
-            timing: "10:00 AM - 10:00 PM"
-        },
-        {
-            id: 4,
-            name: "Toni&Guy Essensuals",
-            address: "Up Hill",
-            city: "Malappuram",
-            rating: 4.9,
-            reviews: "2.5K",
-            image: "https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=800",
-            phone: "+91 98470 99999",
-            timing: "09:30 AM - 09:00 PM"
-        }
-    ];
+    const [salons, setSalons] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    React.useEffect(() => {
+        const fetchSalons = async () => {
+            try {
+                // Fetch using our standard api route (or from an imported api if available – since we need to import it, let's just use fetch or import api)
+                const api = (await import('../utils/api')).default;
+                const response = await api.get('/salons');
+                const data = response.data.salons || [];
+                const mapped = data.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    address: s.address || s.location || '—',
+                    city: s.city || 'Global',
+                    rating: s.rating_average || 0,
+                    reviews: s.rating_count ? `${s.rating_count}` : '0',
+                    image: s.image_url || "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=800",
+                    phone: s.phone || "---",
+                    timing: s.hours || "09:00 AM - 09:00 PM"
+                }));
+                setSalons(mapped);
+            } catch (error) {
+                console.error('Error fetching salons:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchSalons();
+    }, []);
 
     const cities = ['All', 'Kottakkal', 'Tirur', 'Malappuram', 'Kochi', 'Perintalmanna', 'Valavanur'];
 
@@ -151,7 +112,7 @@ const Locations = () => {
                                 <img src={salon.image} className="w-full h-full object-cover opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all duration-1000" alt={salon.name} />
                                 <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-2 border border-white/5">
                                     <Star size={14} className="text-amber-400 fill-amber-400" />
-                                    <span className="text-xs font-black text-white">{salon.rating}</span>
+                                    <span className="text-xs font-black text-white">{salon.rating > 0 ? salon.rating : 'New'}</span>
                                 </div>
                             </div>
 

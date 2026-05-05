@@ -13,10 +13,12 @@ import { requireAuth, restrictTo } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
+// Publicly accessible for guests to book a slot
+router.post('/', createBooking);
+
 router.use(requireAuth);
 
 // Customer Routes
-router.post('/', createBooking);
 router.get('/my-bookings', getUserBookings);
 router.patch('/:id/cancel', cancelBooking);
 router.patch('/:id/reschedule', rescheduleBooking);

@@ -11,6 +11,10 @@ import bookingRoutes from './routes/bookingRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import staffRoutes from './routes/staffRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
+import communicationRoutes from './routes/communicationRoutes.js';
+import razorpayRoutes from './routes/razorpayRoutes.js';
+import productRoutes from './routes/productRoutes.js';
+import announcementRoutes from './routes/announcementRoutes.js';
 import { getAvailableSlots, getStaffForSalon } from './controllers/availabilityController.js';
 
 
@@ -20,6 +24,7 @@ const app = express();
 
 // Middleware
 app.use(express.json());
+app.use(express.static('public'));
 app.use(cors({
   origin: [
     'http://localhost:5173',
@@ -46,6 +51,10 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/shops', salonRoutes);
 app.use('/api/reviews', reviewRoutes);
+app.use('/api/communications', communicationRoutes);
+app.use('/api/razorpay', razorpayRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/announcements', announcementRoutes);
 app.get('/api/availability/slots', getAvailableSlots);
 app.get('/api/availability/staff/:salon_id', getStaffForSalon);
 
@@ -60,6 +69,15 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
+process.on('uncaughtException', (err) => {
+  console.error('🔥 CRITICAL: Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔥 CRITICAL: Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+console.log('🚀 INITIALIZING BEAUTEX SERVER...');
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`✅ LIVE: Beautex API listening on http://0.0.0.0:${PORT}`);
 });

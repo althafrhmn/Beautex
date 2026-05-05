@@ -1,15 +1,48 @@
-import supabase from '../config/supabaseClient.js';
+import supabase, { supabaseAdmin } from '../config/supabaseClient.js';
 
-// Get all active services (Public)
+// Get all active services (Public) — optionally filtered by salon
 export const getAllServices = async (req, res) => {
     try {
+        const { salon_id } = req.query;
+
+        if (salon_id) {
+            // Fetch services linked to this specific salon via salon_services
+            const { data, error } = await supabaseAdmin
+                .from('salon_services')
+                .select(`
+                    service_id,
+                    price,
+                    services (
+                        id,
+                        name,
+                        description,
+                        duration_minutes,
+                        category,
+                        image_url
+                    )
+                `)
+                .eq('salon_id', salon_id);
+
+            if (error) throw error;
+
+            // Flatten: use the salon-specific price, include original service id
+            const services = (data || []).map(row => ({
+                ...row.services,
+                original_id: row.services?.id,
+                id: row.service_id,
+                price: row.price   // shop-specific price overrides global
+            }));
+
+            return res.status(200).json({ services });
+        }
+
+        // No filter — return all services (admin use)
         const { data, error } = await supabase
             .from('services')
             .select('*')
             .order('category', { ascending: true });
 
         if (error) throw error;
-
         res.status(200).json({ services: data });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -39,7 +72,7 @@ export const createService = async (req, res) => {
     try {
         const { name, description, price, duration_minutes, category, image_url } = req.body;
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('services')
             .insert([{
                 name,
@@ -66,7 +99,7 @@ export const updateService = async (req, res) => {
         const { id } = req.params;
         const updates = req.body;
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('services')
             .update(updates)
             .eq('id', id)
@@ -87,7 +120,7 @@ export const deleteService = async (req, res) => {
         const { id } = req.params;
 
         // We use soft delete by setting is_active to false
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdmin
             .from('services')
             .update({ is_active: false })
             .eq('id', id)

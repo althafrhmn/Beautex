@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users } from 'lucide-react';
 import api from '../../../utils/api';
 
-const StaffCustomers = () => {
+const StaffCustomers = ({ searchTerm }) => {
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -62,7 +62,11 @@ const StaffCustomers = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#2A2A2A]">
-                                {customers.map((c, i) => (
+                                {customers.filter(c => 
+                                    !searchTerm || 
+                                    c.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                    c.email?.toLowerCase().includes(searchTerm.toLowerCase())
+                                ).map((c, i) => (
                                     <tr key={i} className="hover:bg-[#1A1A1A]/50 transition-colors">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-3">

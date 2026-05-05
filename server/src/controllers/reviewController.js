@@ -1,89 +1,62 @@
-import supabase from '../config/supabaseClient.js';
+import supabase, { supabaseAdmin } from '../config/supabaseClient.js';
 
-// Get all reviews (Admin)
-export const getAllReviews = async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from('reviews')
-            .select(`
-                *,
-                customer:customer_id (full_name),
-                salon:salon_id (name)
-            `)
-            .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        res.status(200).json({ reviews: data });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// Create a review (Customer)
 export const createReview = async (req, res) => {
     try {
-        const { booking_id, salon_id, rating, comment } = req.body;
-        const customer_id = req.user.id;
+        const { booking_id, salon_id, rating } = req.body;
+        const customer_id = req.user.id; // from requireAuth middleware
 
-        const { data, error } = await supabase
+        if (!booking_id || !salon_id || !rating) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+
+        if (rating < 1 || rating > 5) {
+            return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+        }
+
+        // 1. Verify that the booking belongs to this user and is confirmed/completed
+        const { data: booking, error: bError } = await supabaseAdmin
+            .from('bookings')
+            .select('status, customer_id, guest_email')
+            .eq('id', booking_id)
+            .single();
+
+        if (bError || !booking) {
+            return res.status(404).json({ error: 'Booking not found' });
+        }
+
+        const isOwner = booking.customer_id === customer_id || 
+                       (booking.customer_id === null && booking.guest_email === req.user.email);
+                       
+        if (!isOwner) {
+            return res.status(403).json({ error: 'You are not authorized to review this booking' });
+        }
+
+        if (booking.status !== 'confirmed' && booking.status !== 'completed') {
+            return res.status(400).json({ error: 'Only completed bookings can be reviewed' });
+        }
+
+        // 2. Insert the review (unique constraint on booking_id prevents duplicates automatically)
+        const { data: review, error: rError } = await supabaseAdmin
             .from('reviews')
             .insert([{
                 booking_id,
-                customer_id,
                 salon_id,
-                rating,
-                comment,
-                status: 'pending'
+                customer_id,
+                rating
             }])
             .select()
             .single();
 
-        if (error) throw error;
+        if (rError) {
+            if (rError.code === '23505') { // postgres unique violation code
+                return res.status(400).json({ error: 'You have already reviewed this booking' });
+            }
+            throw rError;
+        }
 
-        res.status(201).json({ message: 'Review submitted for approval', review: data });
+        res.status(201).json({ message: 'Rating submitted successfully', review });
     } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// Update review status (Admin - Approved/Rejected)
-export const updateReviewStatus = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-
-        const { data, error } = await supabase
-            .from('reviews')
-            .update({ status })
-            .eq('id', id)
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        res.status(200).json({ message: `Review ${status}`, review: data });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// Get approved reviews for homepage (Public)
-export const getPublicReviews = async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from('reviews')
-            .select(`
-                *,
-                customer:customer_id (full_name)
-            `)
-            .eq('status', 'approved')
-            .limit(6);
-
-        if (error) throw error;
-
-        res.status(200).json({ reviews: data });
-    } catch (error) {
+        console.error('Create Review Error:', error);
         res.status(500).json({ error: error.message });
     }
 };

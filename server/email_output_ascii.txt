@@ -1,0 +1,33 @@
+[dotenv@17.2.3] injecting env (6) from .env -- tip: ???? prevent committing .env to code: https://dotenvx.com/precommit
+???? Mail Service: LIVE MODE ??? Sending from althafrahman960@gmail.com
+Testing OTP email...
+node : ??? Mail dispatch 
+failed. Full error:
+At line:1 char:11
++ $output = node test_email.js 
+2>&1; $output | Out-String | 
+Set-Content ...
++           
+~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : N 
+   otSpecified: (??? Mail disp  
+  atch failed. Full error::St   
+ ring) [], RemoteException
+    + FullyQualifiedErrorId : N 
+   ativeCommandError
+ 
+   Error Code: ESOCKET
+   Error Message: self-signed 
+certificate in certificate chain
+   Response: undefined
+
+=========================================
+??????  EMAIL FAILED ??? Falling back to console OTP
+???? OTP for test@gmail.com is: [ 123456 ]
+=========================================
+???? TIP: Check your EMAIL_USER and EMAIL_PASS in server/.env
+   - EMAIL_USER should be your full Gmail address
+   - EMAIL_PASS should be a 16-char App Password (no spaces)
+
+Result: { success: true, fallback: true }
+

@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronRight, Calendar, Clock, User, Star,
     MapPin, Check, Info, ShieldCheck, Heart,
-    Share2, Scissors, ArrowLeft, Shield, Phone
+    Share2, Scissors, ArrowLeft, Shield, Phone, Globe
 } from 'lucide-react';
 import axios from 'axios';
+import PromoBanner from '../components/customer/PromoBanner';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -17,249 +18,168 @@ const SalonDetail = () => {
     const location = useLocation();
     const { isAuthenticated } = useSelector((state) => state.auth);
 
-    const [selectedService, setSelectedService] = useState(null);
+    const [selectedServices, setSelectedServices] = useState([]);
     const [services, setServices] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [selectedProducts, setSelectedProducts] = useState([]);
+    const [announcements, setAnnouncements] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [toast, setToast] = useState(null);
+    const [isFavorited, setIsFavorited] = useState(() => {
+        try {
+            const favs = JSON.parse(localStorage.getItem('btx_favorites') || '[]');
+            return favs.includes(id);
+        } catch { return false; }
+    });
 
-    const mockServices = [
-        { id: '101', name: "Men's Precision Cut", price: '450', duration_minutes: 45, category: 'Hair' },
-        { id: '105', name: 'Beard Sculpting', price: '300', duration_minutes: 30, category: 'Hair' },
-        { id: '111', name: 'Deep Tissue Massage', price: '1200', duration_minutes: 60, category: 'Massage' },
-        { id: '102', name: 'Global Luxe Color', price: '3500', duration_minutes: 150, category: 'Hair' },
-        { id: '107', name: 'Gold Alchemy Facial', price: '4500', duration_minutes: 90, category: 'Skin' },
-        
-        { id: '201', name: 'Bridal Alchemy Pack', price: '15000', duration_minutes: 300, category: 'Bridal' },
-        { id: '204', name: 'Classic Bridal Makeover', price: '10000', duration_minutes: 240, category: 'Bridal' },
-        { id: '205', name: 'Premium HD Bridal Glow', price: '25000', duration_minutes: 360, category: 'Bridal' },
-        { id: '206', name: 'Pre-Wedding Radiance Set', price: '8500', duration_minutes: 180, category: 'Bridal' },
-
-        { id: '202', name: 'Keratin Infusion', price: '4000', duration_minutes: 180, category: 'Hair' },
-        { id: '203', name: 'Detox Body Wrap', price: '2800', duration_minutes: 60, category: 'Wellness' },
-    ];
-
-    // Helper to generate unique services and pricing per shop
-    const getShopServices = (salon, allServices) => {
-        if (!salon) return allServices;
-        const salonId = salon.id;
-        const idNum = typeof salonId === 'string' ? salonId.charCodeAt(0) + (parseInt(salonId) || 0) : salonId;
-        
-        const isGrooming = /grooming/i.test(salon.name);
-        const isBridalShop = /bridal|wedding|ladies|boutique|makeover|essensuals|ziana/i.test(salon.name);
-
-        const filtered = allServices.filter((s, i) => {
-            // Give men's grooming shops only men's / general haircuts
-            if (isGrooming && (s.category === 'Bridal' || s.category === 'Wellness' || s.name.toLowerCase().includes('facial'))) return false;
-            // Limit Bridals to bridal shops
-            if (s.category === 'Bridal' && !isBridalShop) return false;
-            
-            // Randomly drop some services so no shop has everything
-            if ((i + idNum) % 4 === 0 && s.category !== 'Hair') return false; 
-            
-            return true;
-        });
-
-        const finalServices = filtered.length > 0 ? filtered : allServices;
-
-        return finalServices.map((s, i) => {
-            const factor = 1 + ((idNum + i) % 4) * 0.15;
-            const newPrice = Math.round(parseFloat(s.price) * factor / 50) * 50;
-            
-            let prefix = "";
-            if ((idNum + i) % 3 === 1) prefix = "Luxe ";
-            else if ((idNum + i) % 3 === 2) prefix = "Signature ";
-            
-            return {
-                ...s,
-                id: `${s.id}-${salonId}`, // ensure unique keys
-                original_id: s.id,
-                price: newPrice.toString(),
-                name: (prefix && !s.name.includes("Luxe") && !s.name.includes("Signature")) ? `${prefix}${s.name}` : s.name
-            };
-        });
+    const showToast = (msg, type = 'success') => {
+        setToast({ msg, type });
+        setTimeout(() => setToast(null), 2500);
     };
 
-    useEffect(() => {
-        const fetchServices = async () => {
+    const handleShare = async () => {
+        const url = window.location.href;
+        const name = currentSalon?.name || 'this salon';
+        if (navigator.share) {
             try {
-                const res = await axios.get(`${API_URL}/services`);
-                const loadedServices = res.data?.services?.length > 0 ? res.data.services : mockServices;
-                const shopSpecific = getShopServices(currentSalon, loadedServices);
-                setServices(shopSpecific);
+                await navigator.share({ title: name, text: `Check out ${name} on Beautex!`, url });
+            } catch (e) { /* user cancelled */ }
+        } else {
+            await navigator.clipboard.writeText(url);
+            showToast('Link copied to clipboard!');
+        }
+    };
 
-                // If a service was pre-selected from Explore, find it in the loaded list
+    const handleFavorite = () => {
+        try {
+            const favs = JSON.parse(localStorage.getItem('btx_favorites') || '[]');
+            let updated;
+            if (isFavorited) {
+                updated = favs.filter(f => f !== id);
+                showToast('Removed from saved salons', 'info');
+            } else {
+                updated = [...favs, id];
+                showToast('Saved to your collection ♥');
+            }
+            localStorage.setItem('btx_favorites', JSON.stringify(updated));
+            setIsFavorited(!isFavorited);
+        } catch (e) {}
+    };
+
+    const [currentSalon, setCurrentSalon] = useState(null);
+
+    useEffect(() => {
+        const fetchSalonData = async () => {
+            try {
+                // Fetch the shop details
+                const shopRes = await axios.get(`${API_URL}/shops`);
+                const allShops = shopRes.data?.salons || shopRes.data?.shops || [];
+                const foundShop = allShops.find(s => String(s.id) === String(id));
+                setCurrentSalon(foundShop || null);
+
+                // Fetch services for THIS salon only via salon_services junction table
+                const res = await axios.get(`${API_URL}/services?salon_id=${id}`);
+                const loadedServices = res.data?.services || [];
+                setServices(loadedServices);
+
                 if (location.state?.preselectedService) {
-                    const found = shopSpecific.find(s => s.original_id === location.state.preselectedService.id || s.id === location.state.preselectedService.id);
-                    if (found) setSelectedService(found);
+                    const found = loadedServices.find(s => s.id === location.state.preselectedService.id || s.original_id === location.state.preselectedService.id);
+                    if (found) setSelectedServices([found]);
+                }
+
+                // Fetch products for this salon
+                try {
+                    const prodRes = await axios.get(`${API_URL}/products?salon_id=${id}`);
+                    setProducts(prodRes.data?.products || []);
+                } catch (e) {
+                    console.error("Failed to load products:", e);
+                }
+
+                // Fetch announcements for this salon
+                try {
+                    const annRes = await axios.get(`${API_URL}/announcements?salon_id=${id}`);
+                    setAnnouncements(annRes.data?.announcements || []);
+                } catch (e) {
+                    console.error("Failed to load announcements:", e);
                 }
             } catch (err) {
-                const shopSpecific = getShopServices(currentSalon, mockServices);
-                setServices(shopSpecific);
+                console.error("Failed to load salon details:", err);
             } finally {
                 setLoading(false);
             }
         };
-        fetchServices();
+        fetchSalonData();
     }, [id, location.state]);
 
-    const allSalons = [
-        {
-            id: 1,
-            name: "Glam Makeovers Kottakkal",
-            address: "Pallippuram Arcade",
-            city: "Kottakkal",
-            rating: 4.8,
-            reviews: "2.3K",
-            phone: "+91 98470 12345",
-            timing: "9:00 AM - 8:00 PM",
-            image: "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 2,
-            name: "Toni&Guy Essensuals",
-            address: "Up Hill",
-            city: "Malappuram",
-            rating: 4.9,
-            reviews: "2.5K",
-            phone: "+91 98470 99999",
-            timing: "9:30 AM - 9:00 PM",
-            image: "https://images.unsplash.com/photo-1562322140-8baeececf3df?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 6,
-            name: "Nafi Store & Beauty Studio",
-            address: "Manjeri Road",
-            city: "Malappuram",
-            rating: 4.9,
-            reviews: "1.5K",
-            image: "/assets/salons/nafi_bridal.png"
-        },
-        {
-            id: 7,
-            name: "Ethereal Bridal Boutique",
-            address: "Kottakkal Road",
-            city: "Malappuram",
-            rating: 4.8,
-            reviews: "890",
-            image: "/assets/salons/ethereal_bridal.png"
-        },
-        {
-            id: 8,
-            name: "Malappuram Grooming Hub",
-            address: "Down Hill",
-            city: "Malappuram",
-            rating: 4.7,
-            reviews: "600",
-            image: "/assets/salons/grooming_hub.png"
-        },
-        {
-            id: 14,
-            name: "Luxe Nail & Artistry",
-            address: "Palm Avenue",
-            city: "Kottakkal",
-            rating: 4.9,
-            reviews: "450",
-            image: "https://images.unsplash.com/photo-1632345031435-8727f6897d53?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 3,
-            name: "Enchanted Spa & Wellness",
-            address: "Marine Drive",
-            city: "Kochi",
-            rating: 4.7,
-            reviews: "3.1K",
-            phone: "+91 98470 77777",
-            timing: "8:00 AM - 10:00 PM",
-            image: "https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 4,
-            name: "The Royal Grooming Studio",
-            address: "Central Plaza",
-            city: "Tirur",
-            rating: 4.6,
-            reviews: "950",
-            phone: "+91 98470 66666",
-            timing: "10:00 AM - 8:00 PM",
-            image: "https://images.unsplash.com/photo-1541533375320-fd81af7a1768?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 5,
-            name: "Aesthetic Elite",
-            address: "City Centre",
-            city: "Perintalmanna",
-            rating: 4.9,
-            reviews: "1.8K",
-            phone: "+91 98470 55555",
-            timing: "9:00 AM - 9:00 PM",
-            image: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 9,
-            name: "Red Rose Ladies Beauty Salon",
-            address: "Main Road",
-            city: "Tirur",
-            rating: 4.0,
-            reviews: "1.4K",
-            image: "https://images.unsplash.com/photo-1487412947147-5cebf100ffc2?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 11,
-            name: "Royal Malabar Boutique",
-            address: "Main Road",
-            city: "Malappuram",
-            rating: 4.9,
-            reviews: "2.1K",
-            image: "https://images.unsplash.com/photo-1510005716170-6da485292497?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 12,
-            name: "The Wedding Belle Studio",
-            address: "MG Road",
-            city: "Kochi",
-            rating: 4.8,
-            reviews: "1.4K",
-            image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 13,
-            name: "Ziana Beauty Artistry",
-            address: "Ooty Road",
-            city: "Perintalmanna",
-            rating: 4.7,
-            reviews: "670",
-            image: "https://images.unsplash.com/photo-1519213793-1628fc0e64f0?auto=format&fit=crop&q=80&w=1920"
-        },
-        {
-            id: 10,
-            name: "Beautx Unisex Salon",
-            address: "Main Junction",
-            city: "Valavanur",
-            rating: 4.5,
-            reviews: "432",
-            image: "https://images.unsplash.com/photo-1521590832167-7bcbfaa6381f?auto=format&fit=crop&q=80&w=1920"
-        }
-    ];
-
-    const currentSalon = allSalons.find(s => s.id === parseInt(id)) || allSalons[0];
-
-    const handleConfirmBooking = () => {
-        navigate('/bookings', {
-            state: {
-                salon: {
-                    ...currentSalon,
-                    image_url: currentSalon.image || currentSalon.image_url // map image to image_url for BookingFlow
-                },
-                service: selectedService
-            }
+    const toggleService = (service) => {
+        setSelectedServices(prev => {
+            const exists = prev.find(s => s.id === service.id);
+            if (exists) return prev.filter(s => s.id !== service.id);
+            return [...prev, service];
         });
     };
 
+    const handleConfirmBooking = () => {
+        const bookingData = {
+            salon: {
+                ...currentSalon,
+                image_url: currentSalon.image || currentSalon.image_url
+            },
+            service: selectedServices[0],   // BookingFlow uses first as primary
+            services: selectedServices,
+            products: selectedProducts
+        };
+
+        if (!isAuthenticated) {
+            sessionStorage.setItem('pendingBooking', JSON.stringify(bookingData));
+            navigate('/login', { state: { from: '/bookings' } });
+            return;
+        }
+        navigate('/bookings', { state: bookingData });
+    };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-[#00E6A0] border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    if (!currentSalon) {
+        return (
+            <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center text-center p-6">
+                <h2 className="text-3xl font-black text-white mb-4">Shop Not Found</h2>
+                <p className="text-gray-500 mb-8 italic text-sm">We couldn't locate this sanctuary in our records.</p>
+                <button onClick={() => navigate(-1)} className="px-8 py-3 bg-white/5 border border-white/5 rounded-2xl text-white font-bold hover:bg-white/10 transition-all flex items-center gap-2">
+                    <ArrowLeft size={18} /> Back to Directory
+                </button>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-[#050505] text-white">
+            {/* Toast Notification */}
+            <AnimatePresence>
+            {toast && (
+                <motion.div
+                    key="toast"
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    className={`fixed top-24 left-1/2 -translate-x-1/2 z-[999] px-6 py-3 rounded-2xl font-bold text-sm shadow-2xl ${
+                        toast.type === 'info' ? 'bg-[#1A1A1A] border border-white/10 text-white' : 'bg-[#00E6A0] text-[#050505]'
+                    }`}
+                >
+                    {toast.msg}
+                </motion.div>
+            )}
+            </AnimatePresence>
             {/* Salon Header Hero */}
             <div className="relative h-[60vh] w-full">
                 <img
-                    src={currentSalon.image}
+                    src={currentSalon.image || currentSalon.image_url}
                     className="w-full h-full object-cover opacity-60"
                     alt={currentSalon.name}
                 />
@@ -287,11 +207,34 @@ const SalonDetail = () => {
                                     <span className="text-gray-500 text-xs">({currentSalon.reviews} Reviews)</span>
                                 </div>
                                 <div className="flex gap-4">
-                                    <button className="p-3 bg-white/5 rounded-2xl border border-white/5 text-gray-400 hover:text-[#00E6A0] hover:border-[#00E6A0]/30 transition-all shadow-sm">
+                                    {currentSalon.google_maps_url && (
+                                        <a 
+                                            href={currentSalon.google_maps_url} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="flex items-center gap-2 px-6 py-3 bg-[#00E6A0] text-[#050505] rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-white transition-all shadow-lg shadow-[#00E6A0]/20"
+                                        >
+                                            <Globe size={14} />
+                                            Get Directions
+                                        </a>
+                                    )}
+                                    <button
+                                        onClick={handleShare}
+                                        title="Share this salon"
+                                        className="p-3 bg-white/5 rounded-2xl border border-white/5 text-gray-400 hover:text-[#00E6A0] hover:border-[#00E6A0]/30 transition-all shadow-sm"
+                                    >
                                         <Share2 size={18} />
                                     </button>
-                                    <button className="p-3 bg-white/5 rounded-2xl border border-white/5 text-gray-400 hover:text-[#00E6A0] hover:border-[#00E6A0] transition-all shadow-sm">
-                                        <Heart size={18} />
+                                    <button
+                                        onClick={handleFavorite}
+                                        title={isFavorited ? 'Remove from saved' : 'Save this salon'}
+                                        className={`p-3 rounded-2xl border transition-all shadow-sm ${
+                                            isFavorited
+                                                ? 'bg-pink-500/10 border-pink-500/30 text-pink-400'
+                                                : 'bg-white/5 border-white/5 text-gray-400 hover:text-pink-400 hover:border-pink-400/30'
+                                        }`}
+                                    >
+                                        <Heart size={18} className={isFavorited ? 'fill-pink-400' : ''} />
                                     </button>
                                 </div>
                             </div>
@@ -305,6 +248,12 @@ const SalonDetail = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
                     {/* Services Column */}
                     <div className="lg:col-span-2 space-y-12">
+                        {/* Salon Specific Banner */}
+                        {announcements.length > 0 && (
+                            <section className="mb-8">
+                                <PromoBanner announcement={announcements[0]} />
+                            </section>
+                        )}
                         <section>
                             <div className="flex items-center gap-4 mb-8">
                                 <div className="w-12 h-12 bg-[#00E6A0]/10 rounded-2xl flex items-center justify-center text-[#00E6A0]">
@@ -317,16 +266,18 @@ const SalonDetail = () => {
                                 {services.map(service => (
                                     <div
                                         key={service.id}
-                                        onClick={() => setSelectedService(service)}
-                                        className={`group relative p-8 rounded-[2.5rem] border transition-all cursor-pointer flex items-center justify-between ${selectedService?.id === service.id
+                                        onClick={() => toggleService(service)}
+                                        className={`group relative p-8 rounded-[2.5rem] border transition-all cursor-pointer flex items-center justify-between ${
+                                            selectedServices.find(s => s.id === service.id)
                                             ? 'bg-white/5 border-[#00E6A0] shadow-xl shadow-[#00E6A0]/5'
                                             : 'bg-[#0A0A0A] border-white/5 hover:border-[#00E6A0]/30'
-                                            }`}
+                                        }`}
                                     >
                                         <div className="flex items-center gap-6">
-                                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${selectedService?.id === service.id ? 'bg-[#00E6A0] border-[#00E6A0]' : 'border-white/10'
-                                                }`}>
-                                                {selectedService?.id === service.id && <Check size={14} className="text-[#050505]" />}
+                                            <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                                                selectedServices.find(s => s.id === service.id) ? 'bg-[#00E6A0] border-[#00E6A0]' : 'border-white/10'
+                                            }`}>
+                                                {selectedServices.find(s => s.id === service.id) && <Check size={14} className="text-[#050505]" />}
                                             </div>
                                             <div>
                                                 <h3 className="text-xl font-bold text-white mb-1 group-hover:text-[#00E6A0] transition-colors">{service.name}</h3>
@@ -340,6 +291,74 @@ const SalonDetail = () => {
                                 ))}
                             </div>
                         </section>
+
+                        {products.length > 0 && (
+                            <section>
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-12 h-12 bg-[#00E6A0]/10 rounded-2xl flex items-center justify-center text-[#00E6A0]">
+                                        <Heart size={24} />
+                                    </div>
+                                    <h2 className="text-3xl font-black tracking-tight text-white">Premium Products</h2>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {products.map(product => {
+                                        const isSelected = selectedProducts.find(p => p.product.id === product.id);
+                                        return (
+                                            <div
+                                                key={product.id}
+                                                className={`group relative p-6 rounded-3xl border transition-all ${isSelected
+                                                    ? 'bg-white/5 border-[#00E6A0] shadow-xl shadow-[#00E6A0]/5'
+                                                    : 'bg-[#0A0A0A] border-white/5 hover:border-[#00E6A0]/30'
+                                                    }`}
+                                            >
+                                                <div className="flex gap-4">
+                                                    <div className="w-20 h-20 bg-[#141414] rounded-2xl overflow-hidden flex-shrink-0">
+                                                        {product.image_url ? (
+                                                            <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                                                        ) : (
+                                                            <div className="w-full h-full flex items-center justify-center text-gray-600">No Img</div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <h3 className="text-lg font-bold text-white mb-1">{product.name}</h3>
+                                                        <p className="text-[10px] font-bold text-[#00E6A0] uppercase tracking-wider mb-2">{product.category}</p>
+                                                        <div className="text-xl font-black text-white mb-3">₹{product.price}</div>
+                                                        
+                                                        {isSelected ? (
+                                                            <div className="flex items-center gap-3">
+                                                                <button 
+                                                                    onClick={() => {
+                                                                        if (isSelected.quantity > 1) {
+                                                                            setSelectedProducts(prev => prev.map(p => p.product.id === product.id ? { ...p, quantity: p.quantity - 1 } : p));
+                                                                        } else {
+                                                                            setSelectedProducts(prev => prev.filter(p => p.product.id !== product.id));
+                                                                        }
+                                                                    }}
+                                                                    className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                                                                >-</button>
+                                                                <span className="font-bold">{isSelected.quantity}</span>
+                                                                <button 
+                                                                    onClick={() => setSelectedProducts(prev => prev.map(p => p.product.id === product.id ? { ...p, quantity: p.quantity + 1 } : p))}
+                                                                    className="w-8 h-8 rounded-full bg-[#00E6A0]/20 text-[#00E6A0] flex items-center justify-center hover:bg-[#00E6A0]/30 transition-colors"
+                                                                >+</button>
+                                                            </div>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={() => setSelectedProducts(prev => [...prev, { product, quantity: 1 }])}
+                                                                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors"
+                                                            >
+                                                                Add to Cart
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </section>
+                        )}
 
                         <section className="bg-[#0A0A0A] rounded-[3rem] p-10 border border-white/5">
                             <h3 className="text-2xl font-black mb-6 text-white">About the Shop</h3>
@@ -370,15 +389,20 @@ const SalonDetail = () => {
                             <h3 className="text-2xl font-black tracking-tight mb-8 text-white">Reservation</h3>
 
                             <div className="space-y-8 mb-10">
-                                {selectedService ? (
-                                    <div className="flex gap-5">
-                                        <div className="w-12 h-12 bg-[#00E6A0]/10 rounded-2xl flex items-center justify-center text-[#00E6A0] flex-none">
-                                            <Scissors size={20} />
-                                        </div>
-                                        <div>
-                                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Active Treatment</p>
-                                            <p className="text-lg font-bold text-white">{selectedService.name}</p>
-                                        </div>
+                                {selectedServices.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {selectedServices.map(s => (
+                                            <div key={s.id} className="flex gap-5">
+                                                <div className="w-12 h-12 bg-[#00E6A0]/10 rounded-2xl flex items-center justify-center text-[#00E6A0] flex-none">
+                                                    <Scissors size={20} />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Selected</p>
+                                                    <p className="text-lg font-bold text-white">{s.name}</p>
+                                                </div>
+                                                <button onClick={() => toggleService(s)} className="text-gray-600 hover:text-red-400 transition-colors text-lg leading-none">✕</button>
+                                            </div>
+                                        ))}
                                     </div>
                                 ) : (
                                     <div className="flex gap-5 items-center text-gray-500 p-6 bg-white/5 rounded-2xl border border-dashed border-white/10">
@@ -392,9 +416,11 @@ const SalonDetail = () => {
                                 <div className="flex justify-between items-end">
                                     <div>
                                         <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-1">Estimated Total</p>
-                                        <p className="text-4xl font-black text-white">₹{selectedService?.price || 0}</p>
+                                        <p className="text-4xl font-black text-white">
+                                            ₹{selectedServices.reduce((sum, s) => sum + parseFloat(s.price || 0), 0) + selectedProducts.reduce((sum, item) => sum + (item.product.price * item.quantity), 0)}
+                                        </p>
                                     </div>
-                                    {selectedService && (
+                                    {selectedServices.length > 0 && (
                                         <div className="text-right">
                                             <p className="text-[10px] text-[#00E6A0] font-black uppercase tracking-widest mb-1">Includes GST</p>
                                         </div>
@@ -404,7 +430,7 @@ const SalonDetail = () => {
 
                             <button
                                 onClick={handleConfirmBooking}
-                                disabled={!selectedService}
+                                disabled={selectedServices.length === 0}
                                 className="w-full py-5 bg-[#00E6A0] hover:bg-white disabled:opacity-30 disabled:cursor-not-allowed text-[#050505] rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-[#00E6A0]/20 transition-all flex items-center justify-center gap-3 group"
                             >
                                 Reserve Now

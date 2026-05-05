@@ -46,18 +46,25 @@ ChartJS.register(
     Filler
 );
 
-const StatCard = ({ label, value, icon: Icon, colorClass }) => (
-    <div className="bg-[#141414] border border-[#2A2A2A] rounded-xl p-6 transition-transform hover:-translate-y-1">
-        <div className="flex justify-between items-start mb-4">
-            <div className={`p-3 rounded-lg bg-[#1A1A1A] ${colorClass}`}>
-                <Icon size={20} />
-            </div>
-            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-500">
-                Live
-            </span>
+const StatCard = ({ label, value, icon: Icon, trend, colorClass }) => (
+    <div className="bg-[#111] border border-white/5 rounded-[2rem] p-8 transition-all hover:border-[#00E6A0]/30 group relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-10 transition-opacity">
+            <Icon size={80} />
         </div>
-        <p className="text-gray-400 text-sm font-medium mb-1">{label}</p>
-        <h3 className="text-2xl font-bold tracking-tight text-white">{value}</h3>
+        <div className="flex justify-between items-start mb-6">
+            <div className={`p-4 rounded-2xl bg-[#1A1A1A] ${colorClass} border border-white/5 shadow-inner`}>
+                <Icon size={24} />
+            </div>
+            {trend && (
+                <span className="text-[10px] font-black px-3 py-1 rounded-full bg-[#00E6A0]/10 text-[#00E6A0] uppercase tracking-widest border border-[#00E6A0]/20">
+                    {trend}
+                </span>
+            )}
+        </div>
+        <div>
+            <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">{label}</p>
+            <h3 className="text-4xl font-black tracking-tighter text-white">{value}</h3>
+        </div>
     </div>
 );
 
@@ -151,8 +158,8 @@ const DashboardOverview = () => {
         <div className="space-y-8 font-sans">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-white font-sans">Dashboard Overview</h2>
-                    <p className="text-gray-400 text-sm mt-1">Real-time performance analytics for BeauteX</p>
+                    <h2 className="text-4xl font-black tracking-tighter text-white">System <span className="text-[#00E6A0]">Intelligence</span></h2>
+                    <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2">Real-time performance metrics</p>
                 </div>
 
                 {stats.currentSalon && (
@@ -345,13 +352,11 @@ const DashboardOverview = () => {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-                <StatCard label="Total Revenue" value={`₹${parseFloat(stats.totalRevenue).toLocaleString()}`} icon={DollarSign} colorClass="text-[#00E6A0]" />
-                <StatCard label="Total Bookings" value={stats.totalBookings} icon={CalendarCheck} colorClass="text-blue-500" />
-                <StatCard label="Total Customers" value={stats.totalCustomers} icon={Users} colorClass="text-emerald-500" />
-                <StatCard label="Total Staff" value={stats.totalStaff} icon={Briefcase} colorClass="text-purple-500" />
-                <StatCard label="Total Shops" value={stats.totalShops} icon={Store} colorClass="text-rose-500" />
-                <StatCard label="Total Services" value={stats.totalServices} icon={Scissors} colorClass="text-amber-500" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard label="Platform Revenue" value={`₹${parseFloat(stats.totalRevenue).toLocaleString()}`} icon={DollarSign} trend="+12%" colorClass="text-[#00E6A0]" />
+                <StatCard label="Verified Customers" value={stats.totalCustomers} icon={Users} trend="Active" colorClass="text-[#00E6A0]" />
+                <StatCard label="Active Community" value={stats.totalStaff} icon={Briefcase} trend="Stylists" colorClass="text-[#00E6A0]" />
+                <StatCard label="Total Services" value={stats.totalServices} icon={Scissors} trend="Catalog" colorClass="text-[#00E6A0]" />
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
