@@ -19,12 +19,14 @@ import AdminBannerModeration from '../components/admin/sections/AdminBannerModer
 
 import {
     Search,
-    Bell
+    Bell,
+    Menu
 } from 'lucide-react';
 
 const AdminTerminal = () => {
     const { user, role } = useSelector((state) => state.auth);
     const [activeTab, setActiveTab] = useState('overview');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     const dispatch = useDispatch();
     const navigate = useNavigate();
@@ -73,12 +75,18 @@ const AdminTerminal = () => {
 
     return (
         <div className="min-h-screen bg-[#0F1115] flex text-white font-sans selection:bg-[#00E6A0] selection:text-[#141414]">
-            <AdminSidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} />
+            <AdminSidebar activeTab={activeTab} setActiveTab={setActiveTab} onLogout={handleLogout} isOpen={isSidebarOpen} setIsOpen={setIsSidebarOpen} />
 
             <main className="flex-1 flex flex-col h-screen overflow-y-auto relative custom-scrollbar">
                 {/* Header Container */}
                 <header className="sticky top-0 z-[90] bg-[#0F1115]/90 backdrop-blur-xl border-b border-[#2A2A2A] px-10 py-6 flex justify-between items-center transition-all">
-                    <div>
+                    <div className="flex items-center gap-4">
+                        <button 
+                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                            className="text-gray-400 hover:text-white transition-colors"
+                        >
+                            <Menu size={24} />
+                        </button>
                         <h1 className="text-2xl font-bold tracking-tight text-white capitalize">
                             Admin <span className="text-[#00E6A0] relative after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-full after:h-[2px] after:bg-[#00E6A0] after:rounded-full inline-block pb-1">{activeTab}</span>
                         </h1>

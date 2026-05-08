@@ -23,6 +23,7 @@ import ContactPage from './pages/ContactPage';
 
 import Navbar from './components/layout/Navbar';
 import ScrollToTop from './components/layout/ScrollToTop';
+import ChatWidget from './components/chatbot/ChatWidget';
 
 function App() {
   const dispatch = useDispatch();
@@ -95,6 +96,7 @@ function App() {
           <Route path="/staff/dashboard" element={<PrivateRoute requiredRoles={['staff', 'manager']}><StaffDashboard /></PrivateRoute>} />
 
         </Routes>
+        <ChatWidget />
       </div>
     </Router>
   );

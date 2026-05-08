@@ -77,9 +77,9 @@ export const requestGuestOtp = async (req, res) => {
             throw dbError;
         }
 
-        // Send email (TEMPORARILY DISABLED FOR TESTING)
-        // await sendOtpEmail(email, otpCode, 'Guest');
-        console.log(`[TEST MODE] OTP for ${email}: ${otpCode}`);
+        // Send email 
+        await sendOtpEmail(email, otpCode, 'Guest');
+        // console.log(`[TEST MODE] OTP for ${email}: ${otpCode}`);
         
         res.status(200).json({ message: 'Verification code sent to your email.' });
     } catch (error) {
@@ -98,13 +98,7 @@ export const verifyGuestOtp = async (req, res) => {
     console.log(`🔍 Normalized Email: [${email}], Code: [${code}]`);
  
     try {
-        console.log(`🔍 Verifying Guest OTP for: [${email}] with code: [${code}]`);
-        
-        // BYPASS FOR TESTING
-        if (code === '000000' || code === '123456' || code === '999999') {
-            console.log(`[TEST MODE] Bypassing OTP verification for ${email} with code ${code}`);
-            return res.status(200).json({ message: 'Verified successfully (TEST BYPASS).' });
-        }
+        console.log(`🔍 Verifying Guest OTP for: [${email}]`);
 
         const { data: record, error: dbError } = await supabaseAdmin
             .from('verification_codes')

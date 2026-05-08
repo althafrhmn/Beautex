@@ -80,8 +80,9 @@ const StaffDashboardOverview = () => {
                                         {booking.customer?.full_name?.[0] || '?'}
                                     </div>
                                     <div>
-                                        <p className="font-medium text-white">{booking.customer?.full_name}</p>
-                                        <p className="text-xs text-gray-400">
+                                        <p className="font-medium text-white">{booking.customer?.full_name || 'Guest User'}</p>
+                                        <p className="text-xs text-gray-500">{booking.customer?.phone_number || booking.guest_phone || booking.customer?.email || booking.guest_email || 'No contact info'}</p>
+                                        <p className="text-xs text-gray-400 mt-0.5">
                                             {booking.booking_services?.map(bs => bs.services?.name).join(', ')}
                                         </p>
                                     </div>

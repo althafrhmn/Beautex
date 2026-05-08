@@ -40,7 +40,7 @@ const Navbar = () => {
     const navItems = [
         { name: 'Shops', path: '/explore/all' },
         { name: 'Bookings', path: '/bookings' },
-        { name: 'Offers', path: '/offers' }
+        { name: 'Job Board', path: '/offers' }
     ];
 
     return (

@@ -91,7 +91,7 @@ const StaffBookings = ({ searchTerm }) => {
                                                 </div>
                                                 <div>
                                                     <p className="font-medium text-white">{booking.customer?.full_name || 'Guest User'}</p>
-                                                    <p className="text-xs text-gray-500">{booking.customer?.phone_number || booking.customer?.email}</p>
+                                                    <p className="text-xs text-gray-500">{booking.customer?.phone_number || booking.guest_phone || booking.customer?.email || booking.guest_email || 'No contact info'}</p>
                                                 </div>
                                             </div>
                                         </td>

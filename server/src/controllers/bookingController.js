@@ -61,7 +61,23 @@ export const createBooking = async (req, res) => {
 
         // Loyalty points discount logic
         let points_used = 0;
-        let total_price = base_total_price;
+        let offer_discount = 0;
+
+        // 1. Check for Active 20% OFF Salon Offers
+        const { data: activeOffers } = await supabaseAdmin
+            .from('announcements')
+            .select('title')
+            .eq('salon_id', salon_id)
+            .eq('type', 'offer')
+            .eq('status', 'approved')
+            .eq('is_active', true);
+        
+        const has20PercentOffer = activeOffers?.some(o => o.title.toUpperCase().includes('20%'));
+        if (has20PercentOffer) {
+            offer_discount = Math.floor(base_total_price * 0.20);
+        }
+
+        let total_price = base_total_price - offer_discount;
 
         if (use_points && customer_id) {
             const { data: profile } = await supabaseAdmin
@@ -71,9 +87,10 @@ export const createBooking = async (req, res) => {
                 .single();
                 
             if (profile && profile.loyalty_points >= 100) {
-                const maxDiscountAllowed = Math.floor(base_total_price * 0.20);
-                points_used = Math.min(profile.loyalty_points, maxDiscountAllowed);
-                total_price = base_total_price - points_used;
+                // Loyalty discount is 10% of the price AFTER offer discount
+                const maxPointsAllowed = Math.floor(total_price * 0.10);
+                points_used = Math.min(profile.loyalty_points, maxPointsAllowed);
+                total_price = total_price - points_used;
             }
         }
 
@@ -90,6 +107,7 @@ export const createBooking = async (req, res) => {
             .eq('salon_id', salon_id)
             .eq('booking_date', booking_date)
             .neq('status', 'cancelled')
+            .neq('status', 'pending') // IGNORE pending bookings for capacity (they might be abandoned)
             .lt('start_time', end_time)
             .gt('end_time', start_time);
 

@@ -11,10 +11,11 @@ import {
     Inbox,
     FileText,
     Package,
-    Megaphone
+    Megaphone,
+    X
 } from 'lucide-react';
 
-const StaffSidebar = ({ activeTab, setActiveTab, onLogout, isManagementMode, setIsManagementMode, setShowPinPrompt, role }) => {
+const StaffSidebar = ({ activeTab, setActiveTab, onLogout, isManagementMode, setIsManagementMode, setShowPinPrompt, role, isOpen, setIsOpen }) => {
     const staffItems = [
         { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'bookings', label: 'My Bookings', icon: CalendarCheck },
@@ -35,23 +36,38 @@ const StaffSidebar = ({ activeTab, setActiveTab, onLogout, isManagementMode, set
     const menuItems = isManagementMode ? managerItems : staffItems;
 
     return (
-        <aside className="w-72 h-screen bg-[#141414] border-r border-[#2A2A2A] flex flex-col sticky top-0 z-[100] font-sans">
-            {/* Logo */}
-            <div className="p-8 border-b border-[#2A2A2A]">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-[#00E6A0] rounded-lg flex items-center justify-center text-[#141414]">
-                        <Scissors size={20} strokeWidth={2.5} />
+        <>
+            {/* Backdrop */}
+            {isOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[95] transition-opacity"
+                    onClick={() => setIsOpen(false)}
+                />
+            )}
+
+            <aside className={`fixed top-0 left-0 h-screen w-72 bg-[#141414] border-r border-[#2A2A2A] flex flex-col z-[100] font-sans transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+                {/* Logo & Close Button */}
+                <div className="p-8 border-b border-[#2A2A2A] flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-[#00E6A0] rounded-lg flex items-center justify-center text-[#141414]">
+                            <Scissors size={20} strokeWidth={2.5} />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-bold text-white tracking-wide">
+                                Beaute<span className={`${isManagementMode ? 'text-[#00D1FF]' : 'text-[#00E6A0]'}`}>X</span>
+                            </h2>
+                            <span className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">
+                                Staff Portal
+                            </span>
+                        </div>
                     </div>
-                    <div>
-                        <h2 className="text-xl font-bold text-white tracking-wide">
-                            Beaute<span className={`${isManagementMode ? 'text-[#00D1FF]' : 'text-[#00E6A0]'}`}>X</span>
-                        </h2>
-                        <span className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold">
-                            Staff Portal
-                        </span>
-                    </div>
+                    <button 
+                        onClick={() => setIsOpen(false)}
+                        className="text-gray-500 hover:text-white transition-colors"
+                    >
+                        <X size={20} />
+                    </button>
                 </div>
-            </div>
 
             {/* Navigation */}
             <nav className="flex-1 overflow-y-auto p-4 space-y-1">
@@ -61,7 +77,10 @@ const StaffSidebar = ({ activeTab, setActiveTab, onLogout, isManagementMode, set
                     return (
                         <button
                             key={item.id}
-                            onClick={() => setActiveTab(item.id)}
+                            onClick={() => {
+                                setActiveTab(item.id);
+                                setIsOpen(false);
+                            }}
                             className={`w-full flex items-center gap-3.5 px-4 py-3.5 rounded-xl transition-all duration-200 group ${
                                 isActive
                                     ? `bg-[#212121] ${isManagementMode ? 'text-[#00D1FF]' : 'text-[#00E6A0]'} shadow-sm`
@@ -113,6 +132,7 @@ const StaffSidebar = ({ activeTab, setActiveTab, onLogout, isManagementMode, set
                 </button>
             </div>
         </aside>
+        </>
     );
 };
 

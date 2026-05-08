@@ -4,7 +4,7 @@ import { logout, loginSuccess } from '../redux/authSlice';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../utils/supabaseClient';
 import api from '../utils/api';
-import { Search, Bell } from 'lucide-react';
+import { Search, Bell, Menu } from 'lucide-react';
 
 import StaffSidebar from '../components/staff/StaffSidebar';
 import StaffDashboardOverview from '../components/staff/sections/StaffDashboardOverview';
@@ -22,6 +22,7 @@ import PinPrompt from '../components/manager/PinPrompt';
 const StaffDashboard = () => {
     const { user, role } = useSelector((state) => state.auth);
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isManagementMode, setIsManagementMode] = useState(false);
     const [showPinPrompt, setShowPinPrompt] = useState(false);
@@ -139,12 +140,20 @@ const StaffDashboard = () => {
                 setIsManagementMode={setIsManagementMode}
                 setShowPinPrompt={setShowPinPrompt}
                 role={role}
+                isOpen={isSidebarOpen}
+                setIsOpen={setIsSidebarOpen}
             />
 
             <main className="flex-1 flex flex-col h-screen overflow-y-auto relative custom-scrollbar">
                 {/* Header */}
                 <header className="sticky top-0 z-[90] bg-[#0F1115]/90 backdrop-blur-xl border-b border-[#2A2A2A] px-10 py-6 flex justify-between items-center">
-                    <div>
+                    <div className="flex items-center gap-4">
+                        <button 
+                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                            className="text-gray-400 hover:text-white transition-colors"
+                        >
+                            <Menu size={24} />
+                        </button>
                         <h1 className="text-2xl font-black tracking-tight text-white capitalize">
                             {isManagementMode ? (
                                 <>Executive <span className="text-[#00D1FF] border-b-2 border-[#00D1FF] pb-1">{activeTab}</span></>

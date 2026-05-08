@@ -16,15 +16,14 @@ import razorpayRoutes from './routes/razorpayRoutes.js';
 import productRoutes from './routes/productRoutes.js';
 import announcementRoutes from './routes/announcementRoutes.js';
 import { getAvailableSlots, getStaffForSalon } from './controllers/availabilityController.js';
+import { initReminderService } from './services/reminderService.js';
 
 
 dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(express.json());
-app.use(express.static('public'));
+// !! CORS must be FIRST — before body parsers so that error responses (e.g. 413) still have CORS headers
 app.use(cors({
   origin: [
     'http://localhost:5173',
@@ -38,6 +37,11 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Increase body size limit to 20mb to handle base64-encoded PDF resume uploads
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ limit: '20mb', extended: true }));
+app.use(express.static('public'));
 app.use(helmet());
 app.use(morgan('dev'));
 
@@ -57,6 +61,9 @@ app.use('/api/products', productRoutes);
 app.use('/api/announcements', announcementRoutes);
 app.get('/api/availability/slots', getAvailableSlots);
 app.get('/api/availability/staff/:salon_id', getStaffForSalon);
+
+// Initialize Background Services
+initReminderService();
 
 
 app.get('/api/health', (req, res) => {

@@ -5,7 +5,7 @@ import {
     ArrowLeft, ArrowRight, CheckCircle,
     Scissors, Info, ShieldCheck,
     Check, Plus, Phone, CreditCard, Lock, RefreshCw,
-    ChevronRight, User, QrCode, X, Award
+    ChevronRight, User, QrCode, X, Award, AlertCircle
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import api from '../../utils/api';
@@ -63,12 +63,32 @@ const BookingFlow = () => {
     const [qrBooking, setQrBooking] = useState(null);
     const [userUpiId, setUserUpiId] = useState('');
     const [error, setError] = useState(null);
+    const [activeOffers, setActiveOffers] = useState([]);
     const [usePoints, setUsePoints] = useState(false);
     
-    // Get user from local storage
+    // Get user from local storage/state
     const storedUserStr = localStorage.getItem('user');
     const currentUser = storedUserStr ? JSON.parse(storedUserStr) : null;
-    const userPoints = currentUser?.loyalty_points || 0;
+    const [freshPoints, setFreshPoints] = useState(currentUser?.loyalty_points || 0);
+
+    // Fetch fresh user points on load
+    useEffect(() => {
+        const refreshUserData = async () => {
+            if (!currentUser?.id) return;
+            try {
+                const res = await api.get('/auth/me');
+                if (res.data.user) {
+                    setFreshPoints(res.data.user.loyalty_points || 0);
+                    dispatch(updateUser(res.data.user));
+                }
+            } catch (err) {
+                console.error("Failed to refresh user data", err);
+            }
+        };
+        refreshUserData();
+    }, [dispatch]);
+
+    const userPoints = freshPoints;
 
     // Personal Details step
     const [fullName, setFullName] = useState('');
@@ -157,6 +177,7 @@ const BookingFlow = () => {
         };
 
         init();
+        fetchActiveOffers();
         
         // Clean up pending booking once initialized
         if (sessionStorage.getItem('pendingBooking')) {
@@ -164,6 +185,15 @@ const BookingFlow = () => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    const fetchActiveOffers = async () => {
+        try {
+            const res = await api.get('/announcements');
+            setActiveOffers(res.data.announcements || []);
+        } catch (err) {
+            console.error("Failed to fetch offers", err);
+        }
+    };
 
     const fetchSalons = async () => {
         try {
@@ -326,6 +356,11 @@ const BookingFlow = () => {
     const handleSalonSelect = async (salon, targetStep = 2) => {
         setLoading(true);
         setSelectedSalon(salon);
+        // CRITICAL: Clear previous selections when switching shops
+        setSelectedServices([]);
+        setSelectedStaff(null);
+        setSelectedSlot(null);
+        
         try {
             const res = await api.get(`/shops/${salon.id}/services`);
             if (res.data.services && res.data.services.length > 0) {
@@ -430,8 +465,8 @@ const BookingFlow = () => {
                     amount: amount,
                     currency: currency,
                     name: "Beautex Luxe",
-                    description: `Payment for ${selectedServices.length} services`,
-                    image: "https://beautex-luxe.vercel.app/logo.png",
+                    description: `Rituals Booking for ${selectedServices.length} items`,
+                    // image: "/logo.png", // Use local path or null, never empty string
                     order_id: order_id,
                     handler: async function (response) {
                         try {
@@ -500,9 +535,15 @@ const BookingFlow = () => {
     const productsPrice = selectedProducts.reduce((sum, p) => sum + (parseFloat(p.product.price) * p.quantity), 0);
     const totalPrice = servicesPrice + productsPrice;
     
-    const maxDiscountAllowed = paymentType === 'full' ? Math.floor(servicesPrice * 0.20) : 0;
-    const discountAmount = (usePoints && paymentType === 'full') ? Math.min(userPoints, maxDiscountAllowed) : 0;
-    const finalAmount = totalPrice - discountAmount;
+    // Auto 20% Offer Detection
+    const salonOffer = activeOffers.find(o => o.salon_id === selectedSalon?.id && o.type === 'offer' && o.title.toUpperCase().includes('20%'));
+    const offerDiscount = salonOffer ? Math.floor(servicesPrice * 0.20) : 0;
+
+    const basePriceAfterOffer = totalPrice - offerDiscount;
+    const maxDiscountAllowed = paymentType === 'full' ? Math.floor(basePriceAfterOffer * 0.10) : 0;
+    const pointsDiscount = (usePoints && paymentType === 'full') ? Math.min(userPoints, maxDiscountAllowed) : 0;
+    
+    const finalAmount = basePriceAfterOffer - pointsDiscount;
     const payableAmount = paymentType === 'advance' ? Math.ceil(finalAmount / 2) : finalAmount;
 
 
@@ -626,8 +667,12 @@ const BookingFlow = () => {
                                         onClick={() => handleSalonSelect(salon)}
                                         className="bg-[#0A0A0A] rounded-[2.5rem] p-6 border border-white/5 shadow-sm hover:border-[#00E6A0]/20 transition-all cursor-pointer group flex gap-6"
                                     >
-                                        <div className="w-24 h-24 rounded-3xl overflow-hidden flex-none">
-                                            <img src={salon.image_url} className="w-full h-full object-cover group-hover:scale-110 opacity-70 group-hover:opacity-100 transition-transform duration-700" alt="" />
+                                        <div className="w-24 h-24 rounded-3xl overflow-hidden flex-none bg-white/5 flex items-center justify-center">
+                                            {salon.image_url ? (
+                                                <img src={salon.image_url} className="w-full h-full object-cover group-hover:scale-110 opacity-70 group-hover:opacity-100 transition-transform duration-700" alt="" />
+                                            ) : (
+                                                <Scissors size={32} className="text-white/10" />
+                                            )}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <h3 className="text-lg font-black mb-1 truncate text-white group-hover:text-[#00E6A0] transition-colors">{salon.name}</h3>
@@ -670,8 +715,12 @@ const BookingFlow = () => {
                                             <span className="text-[10px] font-bold text-gray-400">{selectedSalon.rating} ({selectedSalon.reviews})</span>
                                         </div>
                                     </div>
-                                    <div className="w-24 h-24 rounded-[2rem] overflow-hidden">
-                                        <img src={selectedSalon.image_url} className="w-full h-full object-cover opacity-80" alt="" />
+                                    <div className="w-24 h-24 rounded-[2rem] overflow-hidden bg-white/5 flex items-center justify-center">
+                                        {selectedSalon.image_url ? (
+                                            <img src={selectedSalon.image_url} className="w-full h-full object-cover opacity-80" alt="" />
+                                        ) : (
+                                            <Scissors size={32} className="text-white/10" />
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -911,7 +960,7 @@ const BookingFlow = () => {
                                                         setOtpVerified(true);
                                                         setError(null);
                                                     } catch (err) {
-                                                        setError('Invalid code. Please check your email.');
+                                                        setError(err.response?.data?.error || 'Invalid code. Please check your email.');
                                                     } finally {
                                                         setLoading(false);
                                                     }
@@ -924,12 +973,17 @@ const BookingFlow = () => {
                                         </button>
                                     </div>
                                 )}
-                                {otpSent && !otpVerified && <p className="text-[10px] text-gray-500">📩 Code sent to {email}. Check your inbox.</p>}
+                                {otpSent && !otpVerified && (
+                                    <div className="mt-2 flex flex-col gap-1">
+                                        <p className="text-[10px] text-gray-500">📩 Code sent to {email}. Check your inbox.</p>
+                                        {error && <p className="text-xs text-red-400 font-bold flex items-center gap-1"><AlertCircle size={12} /> {error}</p>}
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Optional Phone */}
+                            {/* Phone */}
                             <div className="bg-[#0A0A0A] p-6 rounded-3xl border border-white/5 space-y-1">
-                                <label className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Phone Number (Optional)</label>
+                                <label className="text-[10px] text-[#00E6A0] font-black uppercase tracking-widest">Phone Number *</label>
                                 <input
                                     type="tel"
                                     placeholder="Enter 10-digit number"
@@ -1006,10 +1060,10 @@ const BookingFlow = () => {
                                                 <div className="flex items-center justify-between bg-[#00E6A0]/5 p-3 rounded-xl border border-[#00E6A0]/20 mt-2">
                                                     <div>
                                                         <span className="text-xs font-bold text-[#00E6A0] block">
-                                                            Use {maxDiscountAllowed} Points?
+                                                            Use {Math.min(userPoints, maxDiscountAllowed)} Points?
                                                         </span>
                                                         <span className="text-[10px] text-gray-400 font-medium">
-                                                            Save ₹{maxDiscountAllowed} (Max 20%)
+                                                            Save ₹{Math.min(userPoints, maxDiscountAllowed)} (Max 10%)
                                                         </span>
                                                     </div>
                                                     <label className="relative inline-flex items-center cursor-pointer">
@@ -1025,10 +1079,17 @@ const BookingFlow = () => {
                                             )}
                                         </div>
 
-                                        {usePoints && discountAmount > 0 && (
+                                        {offerDiscount > 0 && (
                                             <div className="flex justify-between items-center text-sm text-[#00E6A0] font-bold">
-                                                <span>Points Discount</span>
-                                                <span>-₹{discountAmount}</span>
+                                                <span>20% Salon Offer</span>
+                                                <span>-₹{offerDiscount}</span>
+                                            </div>
+                                        )}
+
+                                        {usePoints && pointsDiscount > 0 && (
+                                            <div className="flex justify-between items-center text-sm text-[#00E6A0] font-bold">
+                                                <span>Loyalty Discount</span>
+                                                <span>-₹{pointsDiscount}</span>
                                             </div>
                                         )}
 
@@ -1159,9 +1220,9 @@ const BookingFlow = () => {
                         )}
                         {step === 5 && (
                             <button
-                                disabled={!fullName || !email || !otpVerified || (phone !== '' && phone.length !== 10)}
+                                disabled={!fullName || !email || !otpVerified || phone.length !== 10}
                                 onClick={() => setStep(6)}
-                                className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${fullName && email && otpVerified && (phone === '' || phone.length === 10) ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
+                                className={`w-full py-5 rounded-[1.5rem] text-lg font-black text-[#050505] flex items-center justify-center gap-3 shadow-lg transition-all ${fullName && email && otpVerified && phone.length === 10 ? 'bg-[#00E6A0] hover:bg-white shadow-[#00E6A0]/20' : 'bg-gray-800 opacity-50 cursor-not-allowed text-gray-500 shadow-none'}`}
                             >
                                 Review & Pay <ArrowRight size={18} />
                             </button>
@@ -1207,7 +1268,7 @@ const BookingFlow = () => {
                             {/* QR Code */}
                             <div className="bg-white p-5 rounded-[2rem] mb-6 shadow-xl shadow-[#00E6A0]/10 inline-block relative">
                                 <QRCodeSVG
-                                    value={`upi://pay?pa=beautex@upi&pn=Beautex%20Luxe&am=${payableAmount || 0}&cu=INR&tn=Booking%20for%20${selectedServices?.length || 0}%20services`}
+                                    value={`upi://pay?pa=beautex@upi&pn=Beautex%20Luxe&am=${payableAmount || 0}&cu=INR&tn=Booking-${qrBooking?.booking_number || 'Payment'}`}
                                     size={190}
                                     level="H"
                                     includeMargin={false}

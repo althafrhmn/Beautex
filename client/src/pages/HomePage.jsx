@@ -5,7 +5,8 @@ import {
     Scissors, Star, MapPin, Sparkles,
     ArrowRight, Award, Zap, Heart,
     TrendingUp, ShieldCheck, ChevronRight,
-    Store, Users, Tag, Globe, Mail, MessageSquare, Phone, Bookmark
+    Store, Users, Tag, Globe, Mail, MessageSquare, Phone, Bookmark,
+    Megaphone, Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import HomeHeroSlider from '../components/customer/HomeHeroSlider';
@@ -29,6 +30,7 @@ const HomePage = () => {
         try { return JSON.parse(localStorage.getItem('btx_favorites') || '[]'); } catch { return []; }
     });
     const favoriteShops = shops.filter(s => favorites.includes(s.id));
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState(null);
 
     useEffect(() => {
         document.title = "Beautex | Luxury salon booking";
@@ -70,7 +72,10 @@ const HomePage = () => {
             {announcements.length > 0 && (
                 <section className="px-6 py-12 -mt-20 relative z-20">
                     <div className="max-w-7xl mx-auto">
-                        <PromoBanner announcement={announcements[0]} />
+                        <PromoBanner 
+                            announcement={announcements[0]} 
+                            onClick={() => setSelectedAnnouncement(announcements[0])}
+                        />
                     </div>
                 </section>
             )}
@@ -218,13 +223,25 @@ const HomePage = () => {
                                     </div>
                                     {(() => {
                                         const open = isShopOpen(shop.hours, shop.off_days);
+                                        const shopOffer = announcements.find(a => a.salon_id === shop.id && a.type === 'offer');
                                         return (
-                                            <div className={`absolute top-6 right-6 px-3 py-1 backdrop-blur-md rounded-full border text-[10px] font-black uppercase tracking-widest ${
-                                                open
-                                                    ? 'bg-black/40 border-white/10 text-[#00E6A0]'
-                                                    : 'bg-black/40 border-red-500/20 text-red-400'
-                                            }`}>
-                                                {open ? 'Open Now' : 'Closed'}
+                                            <div className="absolute top-6 right-6 flex flex-col items-end gap-2">
+                                                <div className={`px-3 py-1 backdrop-blur-md rounded-full border text-[10px] font-black uppercase tracking-widest ${
+                                                    open
+                                                        ? 'bg-black/40 border-white/10 text-[#00E6A0]'
+                                                        : 'bg-black/40 border-red-500/20 text-red-400'
+                                                }`}>
+                                                    {open ? 'Open Now' : 'Closed'}
+                                                </div>
+                                                {shopOffer && (
+                                                    <motion.div 
+                                                        initial={{ x: 20, opacity: 0 }}
+                                                        animate={{ x: 0, opacity: 1 }}
+                                                        className="px-3 py-1 bg-[#00E6A0] text-black rounded-full text-[9px] font-black uppercase tracking-tighter shadow-lg shadow-[#00E6A0]/20"
+                                                    >
+                                                        {shopOffer.title}
+                                                    </motion.div>
+                                                )}
                                             </div>
                                         );
                                     })()}
@@ -395,6 +412,75 @@ const HomePage = () => {
                     </div>
                 </div>
             </footer>
+
+            {/* Announcement Detail Modal */}
+            <AnimatePresence>
+                {selectedAnnouncement && (
+                    <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[1000] flex items-center justify-center p-6"
+                    >
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setSelectedAnnouncement(null)} />
+                        <motion.div 
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="relative w-full max-w-2xl bg-[#0F1115] border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl"
+                        >
+                            <button 
+                                onClick={() => setSelectedAnnouncement(null)}
+                                className="absolute top-8 right-8 w-12 h-12 bg-white/5 hover:bg-white/10 rounded-2xl flex items-center justify-center text-white transition-all z-20"
+                            >
+                                <Scissors className="rotate-45" size={20} />
+                            </button>
+
+                            <div className="h-64 relative">
+                                <div className={`absolute inset-0 bg-gradient-to-br ${
+                                    selectedAnnouncement.type === 'offer' ? 'from-emerald-500/40' : 
+                                    selectedAnnouncement.type === 'job' ? 'from-blue-500/40' : 'from-amber-500/40'
+                                } to-transparent`} />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    {selectedAnnouncement.type === 'offer' ? <Tag size={80} className="text-emerald-400/20" /> : 
+                                     selectedAnnouncement.type === 'job' ? <Briefcase size={80} className="text-blue-400/20" /> : 
+                                     <Megaphone size={80} className="text-amber-400/20" />}
+                                </div>
+                                <div className="absolute inset-x-0 bottom-0 p-12 bg-gradient-to-t from-[#0F1115] to-transparent">
+                                    <p className="text-[#00E6A0] font-black text-[10px] uppercase tracking-[0.4em] mb-4">Official Broadcast</p>
+                                    <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase italic">
+                                        {selectedAnnouncement.title}
+                                    </h2>
+                                </div>
+                            </div>
+
+                            <div className="p-12 pt-0 space-y-8">
+                                <p className="text-gray-400 text-lg font-medium leading-relaxed italic">
+                                    "{selectedAnnouncement.content}"
+                                </p>
+
+                                <div className="flex flex-col sm:flex-row gap-4 pt-8">
+                                    <button 
+                                        onClick={() => setSelectedAnnouncement(null)}
+                                        className="flex-1 py-5 bg-[#00E6A0] text-black rounded-[1.5rem] font-black text-xs uppercase tracking-widest hover:bg-white transition-all"
+                                    >
+                                        Acknowledge
+                                    </button>
+                                    {selectedAnnouncement.link_url && (
+                                        <a 
+                                            href={selectedAnnouncement.link_url}
+                                            target="_blank"
+                                            className="flex-1 py-5 bg-white/5 border border-white/10 text-white rounded-[1.5rem] font-black text-xs uppercase tracking-widest text-center hover:bg-white/10 transition-all"
+                                        >
+                                            View Details
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

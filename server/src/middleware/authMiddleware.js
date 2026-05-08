@@ -3,10 +3,11 @@ import supabase from '../config/supabaseClient.js';
 export const requireAuth = async (req, res, next) => {
     try {
         const authHeader = req.headers.authorization;
-        const token = authHeader?.split(' ')[1];
+        // Also accept token from query param — needed for direct browser downloads (can't set headers on <a href>)
+        const token = authHeader?.split(' ')[1] || req.query.token;
 
         if (!token) {
-            console.warn('[AUTH] No token provided in Authorization header');
+            console.warn('[AUTH] No token provided in Authorization header or query param');
             return res.status(401).json({ error: 'No token provided' });
         }
 

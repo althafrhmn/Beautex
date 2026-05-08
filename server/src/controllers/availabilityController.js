@@ -75,11 +75,18 @@ export const getAvailableSlots = async (req, res) => {
         let endTime   = 20 * 60;  // 1200
 
         const parseTime = (str) => {
+            if (!str || typeof str !== 'string') return null;
             try {
-                let [time, modifier] = str.trim().split(' ');
+                const trimmed = str.trim();
+                if (!trimmed.includes(' ') && trimmed.includes(':')) {
+                    // Handle 'HH:mm' format
+                    const [h, m] = trimmed.split(':');
+                    return parseInt(h, 10) * 60 + parseInt(m, 10);
+                }
+                let [time, modifier] = trimmed.split(' ');
                 let [hours, minutes] = time.split(':');
-                if (hours === '12') hours = '00';
-                if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
+                if (hours === '12' && modifier === 'AM') hours = '00';
+                if (modifier === 'PM' && hours !== '12') hours = parseInt(hours, 10) + 12;
                 return parseInt(hours, 10) * 60 + parseInt(minutes, 10);
             } catch { return null; }
         };
@@ -89,8 +96,8 @@ export const getAvailableSlots = async (req, res) => {
             if (parts.length === 2) {
                 const s = parseTime(parts[0]);
                 const e = parseTime(parts[1]);
-                if (s != null) startTime = s;
-                if (e != null) endTime   = e;
+                if (s !== null) startTime = s;
+                if (e !== null) endTime   = e;
             }
         }
 
@@ -105,10 +112,10 @@ export const getAvailableSlots = async (req, res) => {
 
             if (staff) {
                 const wh = staff.working_hours || {};
-                const dayHours = wh[dayOfWeek]; // e.g. { start: '09:00', end: '17:00' }
+                const dayHours = wh[dayOfWeek]; // e.g. { start: '09:00 AM', end: '05:00 PM' }
                 
                 // Only use custom hours if the day key actually has start/end
-                if (dayHours && dayHours.start && dayHours.end) {
+                if (dayHours && typeof dayHours.start === 'string' && typeof dayHours.end === 'string') {
                     staffHours = dayHours;
                 }
                 // If staff is on an off day, return no slots
@@ -127,7 +134,8 @@ export const getAvailableSlots = async (req, res) => {
             .select('start_time, end_time, staff_id')
             .eq('salon_id', salon_id)
             .eq('booking_date', date)
-            .neq('status', 'cancelled');
+            .neq('status', 'cancelled')
+            .neq('status', 'pending'); // IGNORE pending bookings so slot remains available until paid
         if (bookingsError) throw bookingsError;
 
         // 2.1 Fetch ALL staff for this salon to calculate capacity

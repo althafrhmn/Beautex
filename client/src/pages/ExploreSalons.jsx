@@ -16,6 +16,7 @@ const ExploreSalons = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [activeFilter, setActiveFilter] = useState(category || 'all');
     const [salons, setSalons] = useState([]);
+    const [announcements, setAnnouncements] = useState([]);
     const [loading, setLoading] = useState(true);
 
     const preselectedService = location.state?.service;
@@ -44,11 +45,24 @@ const ExploreSalons = () => {
                 setSalons(mapped);
             } catch (error) {
                 console.error('Error fetching salons:', error);
-            } finally {
-                setLoading(false);
             }
         };
-        fetchSalons();
+
+        const fetchAnnouncements = async () => {
+            try {
+                const res = await api.get('/announcements');
+                setAnnouncements(res.data.announcements || []);
+            } catch (error) {
+                console.error('Error fetching announcements:', error);
+            }
+        };
+
+        const init = async () => {
+            setLoading(true);
+            await Promise.all([fetchSalons(), fetchAnnouncements()]);
+            setLoading(false);
+        };
+        init();
     }, []);
 
     const categories = [
@@ -178,9 +192,23 @@ const ExploreSalons = () => {
                         >
                             <div className="relative aspect-[4/3] rounded-[2rem] overflow-hidden mb-8">
                                 <img src={salon.image} className="w-full h-full object-cover group-hover:scale-110 opacity-70 group-hover:opacity-100 transition-all duration-1000" alt={salon.name} />
-                                <div className="absolute top-4 right-4 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-2 border border-white/10">
-                                    <Star size={14} className="text-amber-400 fill-amber-400" />
-                                    <span className="text-xs font-black text-white">{salon.rating > 0 ? salon.rating : 'New'}</span>
+                                <div className="absolute top-4 right-4 flex flex-col items-end gap-2">
+                                    <div className="bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-xl flex items-center gap-2 border border-white/10">
+                                        <Star size={14} className="text-amber-400 fill-amber-400" />
+                                        <span className="text-xs font-black text-white">{salon.rating > 0 ? salon.rating : 'New'}</span>
+                                    </div>
+                                    {(() => {
+                                        const shopOffer = announcements.find(a => a.salon_id === salon.id && a.type === 'offer' && a.status === 'approved');
+                                        return shopOffer && (
+                                            <motion.div 
+                                                initial={{ x: 20, opacity: 0 }}
+                                                animate={{ x: 0, opacity: 1 }}
+                                                className="px-3 py-1 bg-[#00E6A0] text-black rounded-full text-[9px] font-black uppercase tracking-tighter shadow-lg shadow-[#00E6A0]/20"
+                                            >
+                                                {shopOffer.title}
+                                            </motion.div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
 

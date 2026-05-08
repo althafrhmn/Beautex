@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Tag, Briefcase, Info, ArrowRight, ExternalLink } from 'lucide-react';
 
-const PromoBanner = ({ announcement }) => {
+const PromoBanner = ({ announcement, onClick }) => {
     if (!announcement) return null;
 
     const { type, title, content, image_url, link_url } = announcement;
@@ -40,7 +40,8 @@ const PromoBanner = ({ announcement }) => {
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`relative overflow-hidden rounded-[2.5rem] border ${currentStyle.border} ${currentStyle.bg} backdrop-blur-xl p-8 group min-h-[300px] flex items-center`}
+            onClick={onClick}
+            className={`relative overflow-hidden rounded-[2.5rem] border ${currentStyle.border} ${currentStyle.bg} backdrop-blur-xl p-8 group min-h-[300px] flex items-center cursor-pointer`}
         >
             {/* Background Image Layer */}
             {currentStyle.image && (

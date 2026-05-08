@@ -121,8 +121,16 @@ const StaffProfile = () => {
                             <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1 italic">Direct Contact</label>
                             <div className="relative group">
                                 <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-[#00E6A0] transition-colors" size={16} />
-                                <input type="text" value={form.phone} onChange={(e) => setForm({...form, phone: e.target.value})}
-                                    className="w-full bg-[#0F1115] border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-sm text-white focus:outline-none focus:border-[#00E6A0]/50 transition-all font-sans font-bold" />
+                                <input 
+                                    type="tel" 
+                                    maxLength="10"
+                                    value={form.phone} 
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/\D/g, '');
+                                        if (val.length <= 10) setForm({...form, phone: val});
+                                    }}
+                                    className="w-full bg-[#0F1115] border border-white/5 rounded-2xl pl-12 pr-6 py-4 text-sm text-white focus:outline-none focus:border-[#00E6A0]/50 transition-all font-sans font-bold" 
+                                />
                             </div>
                         </div>
                     </div>
@@ -169,7 +177,7 @@ const StaffProfile = () => {
                         </div>
                     )}
 
-                    <button onClick={handleSave} disabled={saving}
+                    <button onClick={handleSave} disabled={saving || !form.fullName || (form.phone && form.phone.length !== 10)}
                         className="mt-10 w-full flex items-center justify-center gap-3 bg-[#00E6A0] hover:bg-white text-[#050505] px-8 py-5 rounded-2xl font-black text-sm uppercase tracking-[0.3rem] italic transition-all disabled:opacity-50 shadow-xl shadow-[#00E6A0]/10 hover:shadow-white/5 group active:scale-[0.98]">
                         {saving ? <div className="w-5 h-5 border-2 border-[#141414] border-t-transparent rounded-full animate-spin" /> : <Save size={20} className="group-hover:rotate-12 transition-transform" />}
                         {saving ? 'Processing...' : 'Authorize Updates'}
